@@ -5,7 +5,7 @@
 <h1 align="center">antigravity-cli-mobile</h1>
 
 <p align="center">
-  <b>Premium Android terminal client for the Antigravity CLI — fully offline, fully automated.</b>
+  <b>Premium Android terminal client for the Antigravity CLI — fully automated.</b>
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@
 
 ## English
 
-**antigravity-cli-mobile** is a fully self-contained Android terminal application built to deploy, configure, and run the **Antigravity CLI** on mobile devices — completely offline, right out of the box, with zero user configuration required.
+**antigravity-cli-mobile** is a fully self-contained Android terminal application built to deploy, configure, and run the **Antigravity CLI** on mobile devices — right out of the box, with zero user configuration required.
 
 It is built on a deep fork of the open-source **[Termux](https://github.com/termux/termux-app)** terminal emulator, with a significant layer of custom engineering on top: an embedded Debian Bookworm Linux container, a smart Bash orchestration system, an on-demand proxy engine loader, automatic region-bypass patching, and hardware-compatibility fixes — all woven together into a single APK that just works.
 
@@ -63,16 +63,16 @@ Pre-compiled APK builds are published in the **[Releases](https://github.com/Mil
 
 ## 🚀 Feature Deep-Dive
 
-### 1. ⚡ Zero-Configuration Offline Debian Bootstrap
+### 1. ⚡ Pre-Cached Debian Bootstrap
 
 Installing a full Linux distribution inside `proot-distro` normally requires downloading a 200+ MB rootfs tarball from GitHub. On mobile networks, in regions with unstable connectivity, or in airplane mode — this simply fails.
 
 **Our solution:**
 
-- A pre-compiled **Debian Bookworm (ARM64)** rootfs (~42 MB compressed) is **bundled directly inside the APK** as an asset.
+- A pre-compiled **Debian Bookworm (ARM64)** rootfs (~42 MB compressed) is **bundled directly inside the APK** as an asset. *(Note: Offline bootstrap is optimized for ARM64/aarch64 devices. Other architectures like x86_64 or armv7 will automatically fallback to standard online download).*
 - At first launch, `TermuxInstaller.java` extracts the Termux bootstrap zip, then immediately copies the Debian rootfs into the exact cache path that `proot-distro` expects (`/data/.../var/lib/proot-distro/dlcache/`).
 - `proot-distro install debian` detects the pre-cached file and completes installation **without a single network request**.
-- **Total time from first launch to a running Debian shell: under 30 seconds**, even offline.
+- **Total time from first launch to a running Debian shell: under 30 seconds**, thanks to pre-cached rootfs.
 
 ---
 
@@ -371,7 +371,7 @@ termux-app/
 │   │   ├── check_and_patch.py          ← Auto-patcher for AGY binary
 │   │   └── debian-bookworm-aarch64-pd-v4.17.3.tar.xz  ← Bundled Debian rootfs (~42MB)
 │   └── java/com/termux/app/
-│       └── TermuxInstaller.java        ← Bootstrap installer + offline Debian seeding
+│       └── TermuxInstaller.java        ← Bootstrap installer + pre-cached Debian seeding
 ├── terminal-emulator/                  ← VT100/VT220 emulator library
 ├── terminal-view/                      ← Android View rendering the terminal
 └── termux-shared/                      ← Shared utilities, constants, file ops
@@ -401,7 +401,7 @@ By using this application you accept the terms of all applicable licenses listed
 
 ## Русский
 
-**antigravity-cli-mobile** — это самодостаточное Android-приложение-терминал для развёртывания, настройки и запуска **Antigravity CLI** на мобильных устройствах. Полностью автономно, без интернета при первом запуске, без ручной настройки.
+**antigravity-cli-mobile** — это самодостаточное Android-приложение-терминал для развёртывания, настройки и запуска **Antigravity CLI** на мобильных устройствах. С автоматической установкой и без ручной настройки.
 
 Построено на базе глубокого форка **[Termux](https://github.com/termux/termux-app)** с обширным слоем собственной инженерии: встроенный контейнер Debian Bookworm, умная система Bash-скриптов, загрузчик прокси-ядер по требованию, автоматическое снятие региональной блокировки и исправления совместимости — всё в одном APK.
 
@@ -436,16 +436,16 @@ By using this application you accept the terms of all applicable licenses listed
 
 ## 🚀 Подробное описание ключевых функций
 
-### 1. ⚡ Полностью автономная установка Debian (Offline Bootstrap)
+### 1. ⚡ Предварительно кэшированная установка Debian (Pre-Cached Bootstrap)
 
 Стандартная установка через `proot-distro` требует скачивания образа 200+ МБ с GitHub. Без интернета — не работает.
 
 **Наше решение:**
 
-- Предскомпилированный rootfs **Debian Bookworm (ARM64)** (~42 МБ) **встроен прямо в APK**.
+- Предскомпилированный rootfs **Debian Bookworm (ARM64)** (~42 МБ) **встроен прямо в APK**. *(Примечание: автономная распаковка оптимизирована для ARM64/aarch64 устройств. На других архитектурах, таких как x86_64 или armv7, базовый образ будет скачан из GitHub).*
 - При первом запуске `TermuxInstaller.java` копирует образ в точный путь кэша, ожидаемый `proot-distro` (`/data/.../var/lib/proot-distro/dlcache/`).
 - `proot-distro install debian` обнаруживает файл и завершает установку **без единого сетевого запроса**.
-- **Время до работающего Debian shell: менее 30 секунд** — даже без интернета.
+- **Время до работающего Debian shell: менее 30 секунд** благодаря кэшированию.
 
 ---
 
