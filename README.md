@@ -1,129 +1,59 @@
-# antigravity-cli-mobile
+# 🌌 antigravity-cli-mobile
 
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Milordick/antigravity-cli-mobile?color=blue&logo=github)](https://github.com/Milordick/antigravity-cli-mobile/releases)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/Platform-Android%207.0%2B-green.svg)](#)
 
-Customized Android terminal wrapper designed for the automated setup, management, and launch of the **Google Deepmind Antigravity CLI** sandbox environment on mobile devices.
+---
 
-Модифицированный терминальный клиент для Android, предназначенный для автоматической установки, управления и запуска изолированного окружения **Google Deepmind Antigravity CLI** на мобильных устройствах.
+### 🇺🇸 Project Description
+
+**antigravity-cli-mobile** is a customized terminal application for Android designed to automate the installation, configuration, and launch of the **Google Deepmind Antigravity CLI** sandbox environment on mobile devices. 
+
+Built on top of the open-source **Termux** terminal emulator, it adds a completely offline bootstrap installation method, custom supervisor scripts, dynamic on-demand proxy support (Xray / Hysteria 2), and interface patches for perfect mobile keyboard compatibility.
+
+#### 🔗 Related Projects & Credits:
+* **Antigravity CLI Mobile** (This Repository)
+* **[open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher)** — The open-source patcher used by our container to patch region restrictions and activate the Antigravity sandbox.
+* **[Termux App](https://github.com/termux/termux-app)** — The foundational terminal emulator base.
 
 ---
 
-## 🌍 Language / Язык
-* [English Version](#-english-version)
-* [Русская версия](#-русская-версия)
+### 🇷🇺 Описание проекта
+
+**antigravity-cli-mobile** — это специализированное терминальное приложение для Android, предназначенное для автоматического развертывания, настройки и запуска изолированного окружения **Google Deepmind Antigravity CLI** на мобильных телефонах.
+
+Проект построен на базе **Termux**. В него интегрирована полностью автономная (офлайн) установка Debian-контейнера, встроенные менеджеры автозапуска прокси (Xray / Hysteria 2) и адаптированная под мобильные экраны клавиатура навигации.
+
+#### 🔗 Использованные инструменты и благодарности:
+* **Antigravity CLI Mobile** (Данный репозиторий)
+* **[open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher)** — Открытый патчер, используемый внутри контейнера для обхода региональных ограничений клиента Antigravity.
+* **[Termux App](https://github.com/termux/termux-app)** — Оригинальный терминальный эмулятор, послуживший основой приложения.
 
 ---
 
-## 🇺🇸 English Version
+## ⚡ Main Features / Основные фичи
 
-This project is built on top of the robust **Termux** terminal emulator, adding offline container provisioning, automated bootstrap procedures, dynamic proxy engine configuration, and key compatibility patches to deliver a premium user experience for Antigravity workspace users.
+### 🇺🇸 English
+* **📦 Offline Debian Bootstrap:** Contains a pre-cached Debian Bookworm image. Installation completes in 30 seconds without internet.
+* **🔒 Concurrent Safe Setup:** Synchronized thread locks prevent double-extraction bugs when requesting permissions.
+* **🚀 Dynamic Proxy Provisioning:** Xray (VLESS) and Hysteria 2 are downloaded automatically only when selected.
+* **⌨️ Fallback Arrow Keys:** Keyboard toolbar uses standard ASCII characters (`<-`, `->`, `^`, `v`), eliminating rendering issues and glyph bugs on customized system fonts.
 
-### 🌟 Key Features
-
-* **⚡ Zero-Configuration Offline Setup**
-  * Bundles a pre-compiled Debian Bookworm rootfs container inside application assets.
-  * Installs the complete sandbox environment offline on first launch in under 30 seconds without requiring an internet connection.
-* **🔒 Double-Bootstrap Protection**
-  * Implements synchronized background extraction locks (`mIsInstallingBootstrap`) in Java to prevent duplicate thread crashes during runtime storage permission requests.
-* **🌐 Dynamic On-Demand Proxy Engines**
-  * Supports high-speed proxies including **Xray (VLESS/Reality)** and **Hysteria 2**.
-  * Binaries are *only* downloaded and configured dynamically when the user selects or imports their corresponding configuration, saving bandwidth and keeping first-boot installation instant.
-* **⌨️ Universal Keyboard Compatibility**
-  * Custom extra-keys toolbar maps arrows to clean, standard ASCII strings (`<-`, `->`, `^`, `v`).
-  * Prevents character mapping bugs, replacement glyphs, or localization distortions (e.g., `ij`/`IJ` character bugs) on non-standard device system fonts.
-* **🛠️ Automated Self-Heal**
-  * Auto-rebuilds and validates active shell configurations, directory symlinks, and background services on start.
-
-### 🏗️ Project Architecture
-
-```mermaid
-graph TD
-    A[TermuxActivity Boot] --> B{First Run?}
-    B -- Yes --> C[Extract Offline Debian Rootfs]
-    C --> D[Initialize Custom agy-manager.sh]
-    B -- No --> D
-    D --> E{Proxy Configured?}
-    E -- Yes [VLESS/Reality] --> F[Download & Launch Xray Engine]
-    E -- Yes [Hysteria 2] --> G[Download & Launch Hysteria Engine]
-    E -- No --> H[Launch Direct Connection]
-    F --> I[Start Antigravity CLI Shell]
-    G --> I
-    H --> I
-```
-
-### 🛠️ How to Build
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Milordick/antigravity-cli-mobile.git
-   cd antigravity-cli-mobile
-   ```
-2. Build the universal Release APK:
-   ```bash
-   export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS="0"
-   ./gradlew assembleRelease
-   ```
-3. Locate your compiled APK:
-   `app/build/outputs/apk/release/termux-app_apt-android-7-release_universal.apk`
+### 🇷🇺 Русский
+* **📦 Офлайн-установка Debian:** Установочный образ Debian Bookworm встроен в APK. Установка проходит за 30 секунд без интернета.
+* **🔒 Безопасный запуск:** Специальный блокировщик потоков Java предотвращает сбои при выдаче прав доступа к памяти.
+* **🚀 Умная подгрузка прокси:** Ядра Xray (VLESS) и Hysteria 2 скачиваются из сети только в момент активации подключения.
+* **⌨️ Совместимые стрелки:** Стрелочки навигации переведены на стандартные ASCII-символы (`<-`, `->`, `^`, `v`), что убирает баги шрифтов (буквы `ij`, `Ы` вместо стрелок).
 
 ---
 
-## 🇷🇺 Русская Версия
+## 📦 Releases & Downloads / Релизы и загрузка
 
-Этот проект построен на базе терминального эмулятора **Termux**. Он добавляет автономную установку контейнера, автоматизированные сценарии развертывания, динамическую конфигурацию прокси-серверов и патчи совместимости интерфейса.
+You can download the compiled universal release APK directly from the **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** section:
+* **Latest Version:** `v0.159.0`
+* **Artifact:** `termux-app_apt-android-7-release_universal.apk`
 
-### 🌟 Основные Возможности
-
-* **⚡ Установка без Интернета (Offline Bootstrap)**
-  * Debian Bookworm упакован непосредственно в ресурсы приложения.
-  * Установка окружения при первом запуске занимает менее 30 секунд и не требует подключения к сети.
-* **🔒 Защита от конфликтов при первом запуске**
-  * Синхронизированные потоковые блокировки (`mIsInstallingBootstrap`) в Java предотвращают сбои и дублирование установки при запросе системных разрешений на доступ к памяти.
-* **🌐 Динамическая загрузка ядер прокси**
-  * Поддержка высокоскоростных протоколов **Xray (VLESS/Reality)** и **Hysteria 2**.
-  * Файлы ядер скачиваются *только тогда*, когда пользователь действительно активирует соответствующий тип подключения, что сохраняет установку мгновенной.
-* **⌨️ Исправление стрелочек на клавиатуре**
-  * Клавиши навигации переведены на стандартные ASCII-символы (`<-`, `->`, `^`, `v`).
-  * Полностью решена проблема искажения шрифтов (когда вместо стрелок отображались буквы `ij`, `IJ` или `Ы`).
-* **🛠️ Автоматическое восстановление**
-  * Скрипт проверяет и исправляет пути, символические ссылки и состояние фоновых служб при каждом запуске.
-
-### 🏗️ Архитектура
-
-```mermaid
-graph TD
-    A[Запуск TermuxActivity] --> B{Первый запуск?}
-    B -- Да --> C[Распаковка локального Debian Rootfs]
-    C --> D[Инициализация agy-manager.sh]
-    B -- Нет --> D
-    D --> E{Включен прокси?}
-    E -- Да [VLESS/Reality] --> F[Скачивание и запуск Xray]
-    E -- Да [Hysteria 2] --> G[Скачивание и запуск Hysteria]
-    E -- Нет --> H[Прямое подключение]
-    F --> I[Запуск оболочки Antigravity CLI]
-    G --> I
-    H --> I
-```
-
-### 🛠️ Инструкция по Сборке
-1. Склонируйте репозиторий:
-   ```bash
-   git clone https://github.com/Milordick/antigravity-cli-mobile.git
-   cd antigravity-cli-mobile
-   ```
-2. Соберите универсальный Release APK:
-   ```bash
-   export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS="0"
-   ./gradlew assembleRelease
-   ```
-3. Готовый APK файл будет находиться по пути:
-   `app/build/outputs/apk/release/termux-app_apt-android-7-release_universal.apk`
-
----
-
-## 🎗️ Credits and Attribution / Благодарности
-
-This project is made possible thanks to:
-* **[Termux](https://github.com/termux/termux-app):** The outstanding open-source terminal emulator for Android which serves as the core base of this application.
-* **Google Deepmind Antigravity Team:** Creators of the Antigravity CLI agent workspace environment.
-* **XTLS Team & Apernet:** Developers of the high-performance proxy engines (Xray-core / Hysteria).
+Вы можете скачать готовую собранную версию в разделе **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)**:
+* **Последняя версия:** `v0.159.0`
+* **Файл:** `termux-app_apt-android-7-release_universal.apk`
