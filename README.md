@@ -5,7 +5,7 @@
 <h1 align="center">antigravity-cli-mobile</h1>
 
 <p align="center">
-  <b>Premium Android terminal client for the Google Deepmind Antigravity CLI — fully offline, fully automated.</b>
+  <b>Premium Android terminal client for the Antigravity CLI — fully offline, fully automated.</b>
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@
 
 ## 🇺🇸 English Description
 
-**antigravity-cli-mobile** is a fully self-contained Android terminal application built to deploy, configure, and run the **Google Deepmind Antigravity CLI** on mobile devices — completely offline, right out of the box, with zero user configuration required.
+**antigravity-cli-mobile** is a fully self-contained Android terminal application built to deploy, configure, and run the **Antigravity CLI** on mobile devices — completely offline, right out of the box, with zero user configuration required.
 
 It is built on a deep fork of the open-source **[Termux](https://github.com/termux/termux-app)** terminal emulator, with a significant layer of custom engineering on top: an embedded Debian Bookworm Linux container, a smart Bash orchestration system, an on-demand proxy engine loader, automatic region-bypass patching, and hardware-compatibility fixes — all woven together into a single APK that just works.
 
@@ -47,9 +47,27 @@ This project stands on the shoulders of giants:
 
 Pre-compiled APK builds are published in the **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** tab.
 
-| File | Architectures | Min Android |
-|---|---|---|
-| `termux-app_apt-android-7-release_universal.apk` | arm64-v8a, armeabi-v7a, x86, x86_64 | Android 7.0 (API 24) |
+> Install the **universal** build unless you have a specific reason to use an architecture-specific one. It works on all devices.
+
+### Available APK Variants
+
+| Variant | File suffix | Target CPU | When to use |
+|---|---|---|---|
+| **Universal** ✅ | `_universal.apk` | All (arm64 + arm32 + x86 + x86_64) | **Recommended for all users** |
+| ARM64 | `_arm64-v8a.apk` | 64-bit ARM (most modern phones) | Smaller size, same performance |
+| ARMv7 | `_armeabi-v7a.apk` | 32-bit ARM (older phones, 2013–2017) | For old/budget devices only |
+| x86_64 | `_x86_64.apk` | 64-bit Intel/AMD (emulators, Chromebooks) | Android emulators, x86 tablets |
+| x86 | `_x86.apk` | 32-bit Intel (legacy emulators) | Very old emulators only |
+
+### Version History
+
+| Version | What's new |
+|---|---|
+| **v0.159.0** | Xray & Hysteria2 lazy-load (downloaded only when proxy activated); auto-heal container on launch |
+| **v0.158.0** | Fixed offline Debian install — rootfs now correctly cached in `proot-distro/dlcache/` |
+| **v0.157.0** | ASCII arrow keys fix for Infinix/TECNO/itel custom ROMs |
+| **v0.156.0** | Race-condition fix for double-bootstrap on storage permission dialog |
+| **v0.155.0** | Initial release: offline Debian bootstrap, AGY auto-patcher, VLESS/Hysteria2 import |
 
 ---
 
@@ -373,14 +391,27 @@ termux-app/
 
 ## 📄 License
 
-GNU General Public License v3.0 — see [LICENSE.md](LICENSE.md).
+This project is licensed under the **[GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html)**.
+
+### License Breakdown
+
+| Component | License | Notes |
+|---|---|---|
+| `app/` (this project's custom code) | GPL v3.0 | Original automation, scripts, and modifications |
+| `terminal-emulator/`, `terminal-view/` | Apache 2.0 | From [Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator) |
+| `termux-shared/` | MIT / Apache 2.0 | See [`termux-shared/LICENSE.md`](termux-shared/LICENSE.md) |
+| Termux bootstrap packages | GPL v3.0 | From [termux/termux-packages](https://github.com/termux/termux-packages) |
+| Debian Bookworm rootfs (bundled asset) | Various (DFSG-compatible) | Standard Debian package licenses apply |
+| [open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher) | As-is (upstream) | Used as a runtime dependency, cloned on-demand |
+
+By using this application you accept the terms of all applicable licenses listed above.
 
 ---
 ---
 
 ## 🇷🇺 Русское Описание
 
-**antigravity-cli-mobile** — это самодостаточное Android-приложение-терминал для развёртывания, настройки и запуска **Google Deepmind Antigravity CLI** на мобильных устройствах. Полностью автономно, без интернета при первом запуске, без ручной настройки.
+**antigravity-cli-mobile** — это самодостаточное Android-приложение-терминал для развёртывания, настройки и запуска **Antigravity CLI** на мобильных устройствах. Полностью автономно, без интернета при первом запуске, без ручной настройки.
 
 Построено на базе глубокого форка **[Termux](https://github.com/termux/termux-app)** с обширным слоем собственной инженерии: встроенный контейнер Debian Bookworm, умная система Bash-скриптов, загрузчик прокси-ядер по требованию, автоматическое снятие региональной блокировки и исправления совместимости — всё в одном APK.
 
@@ -399,9 +430,27 @@ GNU General Public License v3.0 — see [LICENSE.md](LICENSE.md).
 
 Готовые APK-файлы публикуются в разделе **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)**.
 
-| Файл | Архитектуры | Минимальный Android |
-|---|---|---|
-| `termux-app_apt-android-7-release_universal.apk` | arm64-v8a, armeabi-v7a, x86, x86_64 | Android 7.0 (API 24) |
+> Устанавливай **universal** сборку, если нет конкретной причины выбирать другую. Работает на всех устройствах.
+
+### Варианты APK
+
+| Вариант | Суффикс файла | Целевой CPU | Когда использовать |
+|---|---|---|---|
+| **Universal** ✅ | `_universal.apk` | Все (arm64 + arm32 + x86 + x86_64) | **Рекомендуется всем** |
+| ARM64 | `_arm64-v8a.apk` | 64-бит ARM (большинство современных телефонов) | Меньший размер, та же производительность |
+| ARMv7 | `_armeabi-v7a.apk` | 32-бит ARM (старые телефоны, 2013–2017) | Только для старых/бюджетных устройств |
+| x86_64 | `_x86_64.apk` | 64-бит Intel/AMD (эмуляторы, Chromebook) | Эмуляторы Android, x86-планшеты |
+| x86 | `_x86.apk` | 32-бит Intel (старые эмуляторы) | Только очень старые эмуляторы |
+
+### История версий
+
+| Версия | Что нового |
+|---|---|
+| **v0.159.0** | Xray и Hysteria2 загружаются только при активации прокси; авто-восстановление контейнера при запуске |
+| **v0.158.0** | Исправлена автономная установка Debian — rootfs теперь корректно кэшируется в `proot-distro/dlcache/` |
+| **v0.157.0** | Исправление ASCII-стрелок для прошивок Infinix/TECNO/itel |
+| **v0.156.0** | Исправление гонки потоков при двойном bootstrap во время диалога разрешений |
+| **v0.155.0** | Первый релиз: автономный Debian bootstrap, авто-патчер AGY, импорт VLESS/Hysteria2 |
 
 ---
 
@@ -681,4 +730,17 @@ export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS="0"
 
 ## 📄 Лицензия
 
-GNU General Public License v3.0 — смотри [LICENSE.md](LICENSE.md).
+Проект распространяется под лицензией **[GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html)**.
+
+### Состав лицензий
+
+| Компонент | Лицензия | Примечание |
+|---|---|---|
+| `app/` (оригинальный код этого проекта) | GPL v3.0 | Автоматизация, скрипты и модификации |
+| `terminal-emulator/`, `terminal-view/` | Apache 2.0 | Из [Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator) |
+| `termux-shared/` | MIT / Apache 2.0 | Смотри [`termux-shared/LICENSE.md`](termux-shared/LICENSE.md) |
+| Bootstrap-пакеты Termux | GPL v3.0 | Из [termux/termux-packages](https://github.com/termux/termux-packages) |
+| Rootfs Debian Bookworm (встроенный актив) | Различные (DFSG-совместимые) | Применяются стандартные лицензии пакетов Debian |
+| [open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher) | As-is (upstream) | Используется как runtime-зависимость, клонируется по требованию |
+
+Используя это приложение, вы принимаете условия всех применимых лицензий, перечисленных выше.
