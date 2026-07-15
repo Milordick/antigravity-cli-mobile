@@ -13,6 +13,7 @@
   <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge" alt="License"/></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Android%207.0%2B-brightgreen.svg?style=for-the-badge" alt="Platform"/></a>
   <a href="#"><img src="https://img.shields.io/badge/Architecture-ARM64%20%7C%20ARMv7%20%7C%20x86%20%7C%20x86__64-orange.svg?style=for-the-badge" alt="Architectures"/></a>
+  <a href="https://pay.cloudtips.ru/p/0ef570e5"><img src="https://img.shields.io/badge/Support-Donate-ff5f5f.svg?style=for-the-badge&logo=heart" alt="Donate"/></a>
 </p>
 
 ---
@@ -342,6 +343,14 @@ All persistent data lives in `/sdcard/AntigravityWorkspace/` on the Android side
 
 ### 🐚 Raw Debian Shell
 **Menu → 5** drops you into a plain `bash` shell inside the Debian container with `/workspace` and `/sdcard` mounted. Useful for manual debugging, installing packages, or advanced configuration.
+
+---
+
+## 💖 Support / Donation
+
+If you find this project useful, you can support its development by donating via CloudTips:
+
+👉 **[Support via CloudTips](https://pay.cloudtips.ru/p/0ef570e5)**
 
 ---
 
@@ -690,6 +699,14 @@ export ALL_PROXY="http://127.0.0.1:10809"
 
 ### 🐚 Чистый Debian Shell
 **Меню → 5** открывает обычный `bash` внутри Debian с примонтированными `/workspace` и `/sdcard`. Полезно для ручной отладки, установки пакетов и расширенной настройки.
+
+---
+
+## 💖 Поддержка проекта
+
+Если вам нравится этот проект, вы можете поддержать его развитие чаевыми для разработчика через CloudTips:
+
+👉 **[Поддержать через CloudTips](https://pay.cloudtips.ru/p/0ef570e5)**
 
 ---
 
