@@ -5,7 +5,7 @@
 <h1 align="center">antigravity-cli-mobile</h1>
 
 <p align="center">
-  <b>Premium Android terminal client for the Antigravity CLI — fully automated.</b>
+  <b>Android terminal client for the Antigravity CLI — fully automated.</b>
 </p>
 
 <p align="center">
