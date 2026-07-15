@@ -1,7 +1,7 @@
 # 🌌 antigravity-cli-mobile
 
 <p align="center">
-  <img src="app/src/main/res/drawable-xxxhdpi/ic_launcher.png" width="128" height="128" alt="Logo"/>
+  <img src="logo.png" width="128" height="128" alt="Logo"/>
 </p>
 
 <p align="center">
