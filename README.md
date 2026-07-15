@@ -19,12 +19,12 @@
 
 ## 🌍 Language / Язык
 
-- [🇺🇸 English Description](#-english-description)
-- [🇷🇺 Русское описание](#-русское-описание)
+- [English](#english)
+- [Русский](#русский)
 
 ---
 
-## 🇺🇸 English Description
+## English
 
 **antigravity-cli-mobile** is a fully self-contained Android terminal application built to deploy, configure, and run the **Antigravity CLI** on mobile devices — completely offline, right out of the box, with zero user configuration required.
 
@@ -409,7 +409,7 @@ By using this application you accept the terms of all applicable licenses listed
 ---
 ---
 
-## 🇷🇺 Русское Описание
+## Русский
 
 **antigravity-cli-mobile** — это самодостаточное Android-приложение-терминал для развёртывания, настройки и запуска **Antigravity CLI** на мобильных устройствах. Полностью автономно, без интернета при первом запуске, без ручной настройки.
 
