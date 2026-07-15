@@ -59,16 +59,6 @@ Pre-compiled APK builds are published in the **[Releases](https://github.com/Mil
 | x86_64 | `_x86_64.apk` | 64-bit Intel/AMD (emulators, Chromebooks) | Android emulators, x86 tablets |
 | x86 | `_x86.apk` | 32-bit Intel (legacy emulators) | Very old emulators only |
 
-### Version History
-
-| Version | What's new |
-|---|---|
-| **v0.159.0** | Xray & Hysteria2 lazy-load (downloaded only when proxy activated); auto-heal container on launch |
-| **v0.158.0** | Fixed offline Debian install — rootfs now correctly cached in `proot-distro/dlcache/` |
-| **v0.157.0** | ASCII arrow keys fix for Infinix/TECNO/itel custom ROMs |
-| **v0.156.0** | Race-condition fix for double-bootstrap on storage permission dialog |
-| **v0.155.0** | Initial release: offline Debian bootstrap, AGY auto-patcher, VLESS/Hysteria2 import |
-
 ---
 
 ## 🚀 Feature Deep-Dive
@@ -441,16 +431,6 @@ By using this application you accept the terms of all applicable licenses listed
 | ARMv7 | `_armeabi-v7a.apk` | 32-бит ARM (старые телефоны, 2013–2017) | Только для старых/бюджетных устройств |
 | x86_64 | `_x86_64.apk` | 64-бит Intel/AMD (эмуляторы, Chromebook) | Эмуляторы Android, x86-планшеты |
 | x86 | `_x86.apk` | 32-бит Intel (старые эмуляторы) | Только очень старые эмуляторы |
-
-### История версий
-
-| Версия | Что нового |
-|---|---|
-| **v0.159.0** | Xray и Hysteria2 загружаются только при активации прокси; авто-восстановление контейнера при запуске |
-| **v0.158.0** | Исправлена автономная установка Debian — rootfs теперь корректно кэшируется в `proot-distro/dlcache/` |
-| **v0.157.0** | Исправление ASCII-стрелок для прошивок Infinix/TECNO/itel |
-| **v0.156.0** | Исправление гонки потоков при двойном bootstrap во время диалога разрешений |
-| **v0.155.0** | Первый релиз: автономный Debian bootstrap, авто-патчер AGY, импорт VLESS/Hysteria2 |
 
 ---
 
