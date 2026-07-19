@@ -156,9 +156,7 @@ On every launch, the app verifies all required Debian packages (`python3`, `git`
 
 ## 🚀 Quick Start Guide
 
-### Step 1 — Install the APK
-
-Download the latest `termux-app_apt-android-7-release_universal.apk` from the **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** tab and install it. Android may ask you to allow installation from unknown sources — this is expected.
+### Step 1. **Download & Install:** Download the latest `agycli_universal.apk` from the **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** tab and install it. Android may ask you to allow installation from unknown sources — this is expected.
 
 > ⚠️ **Important:** Do NOT install from Google Play. This is a standalone side-loaded app.
 
@@ -362,7 +360,7 @@ cd antigravity-cli-mobile
 
 export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS="0"
 ./gradlew assembleRelease
-# Output: app/build/outputs/apk/release/termux-app_apt-android-7-release_universal.apk
+# Output: app/build/outputs/apk/release/agycli_universal.apk
 ```
 
 **Requirements:** Android SDK with NDK, JDK 11+, Gradle 7+
@@ -524,7 +522,7 @@ AGY CLI содержит региональные ограничения, бло
 
 ### Шаг 1 — Установить APK
 
-Скачай последний `termux-app_apt-android-7-release_universal.apk` из раздела **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** и установи. Android может попросить разрешить установку из неизвестных источников — это ожидаемо.
+Скачай последний `agycli_universal.apk` из раздела **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** и установи. Android может попросить разрешить установку из неизвестных источников — это ожидаемо.
 
 > ⚠️ **Важно:** Не устанавливай из Google Play. Это отдельное приложение, устанавливаемое вручную.
 
@@ -719,7 +717,7 @@ cd antigravity-cli-mobile
 
 export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS="0"
 ./gradlew assembleRelease
-# Результат: app/build/outputs/apk/release/termux-app_apt-android-7-release_universal.apk
+# Результат: app/build/outputs/apk/release/agycli_universal.apk
 ```
 
 **Требования:** Android SDK с NDK, JDK 11+, Gradle 7+
