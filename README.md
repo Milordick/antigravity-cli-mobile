@@ -112,11 +112,11 @@ All configs persist in `/sdcard/AntigravityWorkspace/` — accessible from both 
 
 ### 5. 🛡️ Automatic AGY Binary Patcher (Region Bypass)
 
-The AGY CLI binary contains an eligibility check blocking use outside specific regions. The app integrates the **[open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher)** workflow:
+The AGY CLI binary contains eligibility checks blocking use outside specific regions. The app integrates a heavily modified **[open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher)** workflow with pinned version execution:
 
 - `check_and_patch.py` is copied to the workspace on every launch.
-- Scans the AGY binary for known unpatched byte signatures across **Linux ARM64 ELF**, **x86_64 ELF**, and **macOS arm64 Mach-O** formats.
-- If unpatched → auto-clones the patcher, performs **memory-pattern injection** (replaces the eligibility gate with a NOP slide), restarts AGY.
+- Patcher repository is pinned to a stable commit (`b9a01e8`) to prevent upstream changes from breaking the application.
+- Uses a custom **multi-gate parser** (injecting both Gate 1 and Gate 2 patches on Linux ARM64 ELF) to completely bypass both backend eligibility checks and UI-level block layouts.
 - If already patched → skips everything silently.
 
 ---
@@ -485,11 +485,12 @@ By using this application you accept the terms of all applicable licenses listed
 
 ### 5. 🛡️ Автоматический патч бинарника AGY (обход региональной блокировки)
 
-AGY CLI проверяет регион при запуске. Приложение интегрирует **[open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher)**:
+AGY CLI содержит региональные ограничения, блокирующие работу. Приложение интегрирует глубоко модифицированный воркфлоу **[open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher)** с фиксацией версий:
 
-- `check_and_patch.py` сканирует бинарник на наличие известных непатченных байт-паттернов (Linux ARM64 ELF, x86_64 ELF, macOS Mach-O).
-- Если не пропатчен → авто-клонирует патчер, выполняет инъекцию байт-паттерна (заменяет eligibility-gate на NOP) и перезапускает AGY.
-- Если уже пропатчен → ничего не делает, работает мгновенно.
+- `check_and_patch.py` копируется в рабочее пространство при каждом запуске.
+- Репозиторий патчера жестко зафиксирован на стабильном коммите (`b9a01e8`), чтобы внешние изменения кода не нарушили работу приложения.
+- Применяется кастомный **многоуровневый патч (multi-gate)**, который одновременно нейтрализует проверку на стороне сервера (Gate 1) и скрывает плашку блокировки на уровне интерфейса (Gate 2).
+- Если уже пропатчен → операция пропускается без задержки.
 
 ---
 

@@ -44,8 +44,8 @@ android {
         applicationId "com.agycli"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 159
-        versionName "0.159.0-beta"
+        versionCode 160
+        versionName "0.160.0-beta"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
