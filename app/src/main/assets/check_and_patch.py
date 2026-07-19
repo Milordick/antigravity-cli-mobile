@@ -26,15 +26,48 @@ if os.path.exists(patcher_file):
         code = f.read()
     
     correct_gate = r"""
-LINUX_ARM64_CLI_GATE = Gate(
-    rb"[\x01\x21\x41\x61\x81\xa1\xc1\xe1].\x00\xb5[\x00\x20\x40\x60\x80\xa0\xc0\xe0].\x00\xb4\x03\x20\x40\x39[\x03\x23\x43\x63\x83\xa3\xc3\xe3].\x00\x36",
-    rb"[\x01\x21\x41\x61\x81\xa1\xc1\xe1].\x00\xb5[\x00\x20\x40\x60\x80\xa0\xc0\xe0].\x00\xb4\x23\x00\x80\x52[\x03\x23\x43\x63\x83\xa3\xc3\xe3].\x00\x36",
-    b"\x23\x00\x80\x52",
-    offset=8,
-    desc="eligibility screen off (linux arm64)"
-)
+class CompositeGate:
+    def __init__(self, gates):
+        self.gates = gates
+        self.active_gate = None
+        self.desc = " / ".join(g.desc for g in gates)
+
+    def find(self, data):
+        errors = []
+        for g in self.gates:
+            try:
+                res = g.find(data)
+                self.active_gate = g
+                return res
+            except LookupError as e:
+                errors.append(str(e))
+        raise LookupError("None of the gates matched")
+
+    @property
+    def fix(self):
+        if self.active_gate:
+            return self.active_gate.fix
+        return self.gates[0].fix
+
+LINUX_ARM64_CLI_GATE = CompositeGate([
+    Gate(
+        rb"\xfd\x7b\xbe\xa9\xf4\x4f\x01\xa9\xfd\x03\x00\x91\x80.\x00\xb4........\x28\xfd\xdf\x08\x88.\x00\x36\x08\x20\x40\x39\xa8.\x00\x37",
+        rb"\xfd\x7b\xbe\xa9\xf4\x4f\x01\xa9\xfd\x03\x00\x91\x80.\x00\xb4........\x28\xfd\xdf\x08\x88.\x00\x36\x28\x00\x80\x52\xa8.\x00\x37",
+        b"\x28\x00\x80\x52",
+        offset=32,
+        desc="eligibility screen off (linux arm64 exp)"
+    ),
+    Gate(
+        rb"[\x01\x21\x41\x61\x81\xa1\xc1\xe1].\x00\xb5[\x00\x20\x40\x60\x80\xa0\xc0\xe0].\x00\xb4\x03\x20\x40\x39[\x03\x23\x43\x63\x83\xa3\xc3\xe3].\x00\x36",
+        rb"[\x01\x21\x41\x61\x81\xa1\xc1\xe1].\x00\xb5[\x00\x20\x40\x60\x80\xa0\xc0\xe0].\x00\xb4\x23\x00\x80\x52[\x03\x23\x43\x63\x83\xa3\xc3\xe3].\x00\x36",
+        b"\x23\x00\x80\x52",
+        offset=8,
+        desc="eligibility screen off (linux arm64 old)"
+    )
+])
 """
-    # Remove any existing LINUX_ARM64_CLI_GATE
+    # Remove any existing CompositeGate class and LINUX_ARM64_CLI_GATE
+    code = re.sub(r'class CompositeGate[\s\S]*?LINUX_ARM64_CLI_GATE\s*=\s*CompositeGate\([\s\S]*?\]\)\n', '', code)
     code = re.sub(r'LINUX_ARM64_CLI_GATE\s*=\s*Gate\([\s\S]*?desc="eligibility screen off \(linux arm64\)"\n\)', '', code)
     
     # Re-insert the correct gate after ARM64_CLI_GATE
@@ -72,3 +105,4 @@ try:
         pass
 except Exception as e:
     print(f"[!] Patcher check failed: {e}")
+
