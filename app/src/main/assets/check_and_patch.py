@@ -29,25 +29,28 @@ if os.path.exists(patcher_file):
 class CompositeGate:
     def __init__(self, gates):
         self.gates = gates
-        self.active_gate = None
         self.desc = " / ".join(g.desc for g in gates)
 
     def find(self, data):
-        errors = []
+        statuses = []
         for g in self.gates:
             try:
-                res = g.find(data)
-                self.active_gate = g
-                return res
-            except LookupError as e:
-                errors.append(str(e))
-        raise LookupError("None of the gates matched")
+                statuses.append(g.find(data)[0])
+            except LookupError:
+                statuses.append("unknown")
+        if all(s == "patched" for s in statuses):
+            return ("patched", 0)
+        return ("unpatched", 0)
 
-    @property
-    def fix(self):
-        if self.active_gate:
-            return self.active_gate.fix
-        return self.gates[0].fix
+    def write_patches(self, f, data):
+        for g in self.gates:
+            try:
+                kind, off = g.find(data)
+                if kind == "unpatched" or kind == "patched":
+                    f.seek(off)
+                    f.write(g.fix)
+            except LookupError:
+                pass
 
 LINUX_ARM64_CLI_GATE = CompositeGate([
     Gate(
@@ -55,14 +58,14 @@ LINUX_ARM64_CLI_GATE = CompositeGate([
         rb"\xfd\x7b\xbe\xa9\xf4\x4f\x01\xa9\xfd\x03\x00\x91\x80.\x00\xb4........\x28\xfd\xdf\x08\x88.\x00\x36\x28\x00\x80\x52\xa8.\x00\x37",
         b"\x28\x00\x80\x52",
         offset=32,
-        desc="eligibility screen off (linux arm64 exp)"
+        desc="eligibility gate 1 (linux arm64)"
     ),
     Gate(
-        rb"[\x01\x21\x41\x61\x81\xa1\xc1\xe1].\x00\xb5[\x00\x20\x40\x60\x80\xa0\xc0\xe0].\x00\xb4\x03\x20\x40\x39[\x03\x23\x43\x63\x83\xa3\xc3\xe3].\x00\x36",
-        rb"[\x01\x21\x41\x61\x81\xa1\xc1\xe1].\x00\xb5[\x00\x20\x40\x60\x80\xa0\xc0\xe0].\x00\xb4\x23\x00\x80\x52[\x03\x23\x43\x63\x83\xa3\xc3\xe3].\x00\x36",
-        b"\x23\x00\x80\x52",
+        rb"\x01..\xb5...\xb4\x08\x20\x40\x39...\x37\x08\xa4\x44\xa9",
+        rb"\x01..\xb5...\xb4\x28\x00\x80\x52...\x37\x08\xa4\x44\xa9",
+        b"\x28\x00\x80\x52",
         offset=8,
-        desc="eligibility screen off (linux arm64 old)"
+        desc="eligibility gate 2 (linux arm64)"
     )
 ])
 """
@@ -75,6 +78,11 @@ LINUX_ARM64_CLI_GATE = CompositeGate([
     if insert_pos > 100:
         code = code[:insert_pos] + "\n\n" + correct_gate.strip() + "\n" + code[insert_pos:]
         
+        # Modify do_patch_agy write logic to handle CompositeGate
+        old_write = '            with open(path, "r+b") as f:\n                f.seek(off)\n                f.write(gate.fix)'
+        new_write = '            with open(path, "r+b") as f:\n                if hasattr(gate, "write_patches"):\n                    gate.write_patches(f, d)\n                else:\n                    f.seek(off)\n                    f.write(gate.fix)'
+        code = code.replace(old_write, new_write)
+
         # Make sure _detect_arch is hooked up
         if 'arch == "linux_arm64":' not in code:
             old_ret = 'return ARM64_CLI_GATE if arch == "arm64" else CLI_GATE'
