@@ -563,59 +563,6 @@ run_patcher() {
     fi
     
     if [ -n "$PATCHER_DIR" ]; then
-        # Discard previous dirty changes to ensure a clean patch
-        proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "cd /workspace/\$PATCHER_DIR && git checkout source/patcher/agy/patcher.py 2>/dev/null || true"
-        cat << 'EOF_PY2' > "$WORKSPACE_DIR/__apply_patcher.py"
-import os, re, struct
-path = '/workspace/' + os.environ.get('PATCHER_DIR', 'open-antigravity-patcher') + '/source/patcher/agy/patcher.py'
-if os.path.exists(path):
-    with open(path, 'r', encoding='utf-8') as f:
-        code = f.read()
-    if 'magic == b"\x7fELF"' not in code:
-        new_detect = r'''LINUX_ARM64_CLI_GATE = Gate(
-    rb"[\x00-\xff]{2}\x40\xf9[\x00-\xff]{2}[\x00-\xff]\xf9[\x00-\xff]{3}\x97[\x00-\xff]{3}\xb5[\x00-\xff]{3}\xb4\x03\x20\x40\x39[\x00-\xff]{3}\x37",
-    rb"[\x00-\xff]{2}\x40\xf9[\x00-\xff]{2}[\x00-\xff]\xf9[\x00-\xff]{3}\x97\x1f\x20\x03\xd5[\x00-\xff]{3}\xb4\x23\x00\x80\x52[\x00-\xff]{3}\x37",
-    b"\x1f\x20\x03\xd5\x80\x15\x00\xb4\x23\x00\x80\x52",
-    offset=12,
-    desc="eligibility screen off (linux arm64)"
-)
-
-def _detect_arch(path):
-    try:
-        with open(path, "rb") as f:
-            hdr = f.read(20)
-        if len(hdr) < 8:
-            return "unknown"
-        magic = hdr[:4]
-        if magic == b"\xcf\xfa\xed\xfe":          
-            cputype = struct.unpack_from("<I", hdr, 4)[0]
-            if cputype == 0x0100000c or cputype == 0x0100000C:
-                return "arm64"
-            if cputype == 0x01000007:
-                return "x86_64"
-        elif magic == b"\x7fELF":                 
-            if len(hdr) >= 20:
-                endian = "<" if hdr[5] == 1 else ">"
-                e_machine = struct.unpack_from(endian + "H", hdr, 18)[0]
-                if e_machine == 183:              
-                    return "linux_arm64"
-                elif e_machine == 62:             
-                    return "x86_64"
-        elif hdr[:2] == b"MZ":                    
-            return "x86_64"
-    except Exception:
-        pass
-    return "unknown"'''
-        code = re.sub(r'def _detect_arch\(path\):.*?\n(?!\s)', lambda m: new_detect + '\n\n', code, flags=re.DOTALL)
-        code = code.replace(
-            'return ARM64_CLI_GATE if _detect_arch(path) == "arm64" else CLI_GATE',
-            'arch = _detect_arch(path)\n    if arch == "linux_arm64":\n        return LINUX_ARM64_CLI_GATE\n    return ARM64_CLI_GATE if arch == "arm64" else CLI_GATE'
-        )
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(code)
-EOF_PY2
-        export PATCHER_DIR="$PATCHER_DIR"
-        proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /usr/bin/python3 /workspace/__apply_patcher.py
         proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "export TERM=xterm-256color; export PATCHER_DIR=$PATCHER_DIR; python3 /workspace/\$PATCHER_DIR/source/main.py; pkill -9 -x agy 2>/dev/null"
     else
         log_error "Patcher not available. Place open-antigravity-patcher folder in your workspace."
