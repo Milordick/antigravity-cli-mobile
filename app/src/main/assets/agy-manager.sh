@@ -70,7 +70,7 @@ log_step()  { echo -e "\n${CYAN}${BOLD}  ==== $1 ====${NC}"; }
 
 # -----------------------------------------------------------------------------
 generate_xray_config() {
-    [ -f "$PROXY_CONFIG" ] && source "$PROXY_CONFIG"
+    safe_source_proxy
     XRAY_PORT="${XRAY_PORT:-10808}"
     
     # Copy generate_proxy_config.py to workspace so it is available inside Debian
@@ -125,6 +125,26 @@ parse_vless_link() {
     return 1
 }
 
+safe_source_proxy() {
+    if [ -f "$PROXY_CONFIG" ]; then
+        # Detect corruption: shebang line or CRLF junk means the file is not a valid config
+        local first_line
+        first_line=$(head -1 "$PROXY_CONFIG" | tr -d '\r')
+        if [[ "$first_line" == "#!"* ]] || ! grep -q 'USE_PROXY=' "$PROXY_CONFIG" 2>/dev/null; then
+            log_warn "proxy_config.sh appears corrupted — resetting to defaults."
+            cat > "$PROXY_CONFIG" << 'DEFPROXY'
+USE_PROXY="false"
+PROXY_TYPE="xray"
+PROXY_ADDR="127.0.0.1"
+PROXY_PORT="10808"
+XRAY_PORT="10808"
+DEFPROXY
+        fi
+        # Strip CRLF before sourcing just in case
+        source <(sed 's/\r$//' "$PROXY_CONFIG")
+    fi
+}
+
 is_initialized() {
     [ ! -d "$WORKSPACE_DIR" ]         && return 1
     [ ! -f "$PROXY_CONFIG" ]          && return 1
@@ -134,6 +154,7 @@ is_initialized() {
     [ ! -d "$PREFIX/var/lib/proot-distro/installed-rootfs/debian" ] && return 1
     return 0
 }
+
 
 request_storage() {
     if [ ! -w "/sdcard" ]; then
@@ -331,6 +352,9 @@ BASHRC
 cat > /usr/local/bin/start-agy.sh << 'WRAPPER'
 #!/bin/bash
 export PATH="$HOME/.local/bin:$PATH"
+export CLOUD_CODE_URL="https://cloudcode-pa.googleapis.com"
+export JETSKI_CLOUD_CODE_URL="https://cloudcode-pa.googleapis.com"
+export BORG_DISABLE_EXPERIMENTS="CASCADE_DEFAULT_MODEL_OVERRIDE,CASCADE_USE_EXPERIMENT_CHECKPOINTER,CASCADE_NEW_MODELS_NUX,CASCADE_NEW_WAVE_2_MODELS_NUX"
 [ -f /workspace/proxy_config.sh ] && source /workspace/proxy_config.sh
 
 if [ "$USE_PROXY" = "true" ] && [ "$PROXY_TYPE" = "xray" ]; then
@@ -379,7 +403,7 @@ DEBIAN_SETUP
 
 # -----------------------------------------------------------------------------
 do_start_inner() {
-    [ -f "$PROXY_CONFIG" ] && source "$PROXY_CONFIG"
+    safe_source_proxy
 
     # Auto-heal Debian guest container (upgrades check for packages)
     if ! proot-distro login debian -- command -v python3 >/dev/null 2>&1 ||        ! proot-distro login debian -- command -v git >/dev/null 2>&1 ||        ! proot-distro login debian -- python3 -c "import packaging" >/dev/null 2>&1; then
@@ -409,6 +433,9 @@ do_start_inner() {
     cat > "$WORKSPACE_DIR/start-agy.sh" << 'START_AGY'
 #!/bin/bash
 export PATH="$HOME/.local/bin:$PATH"
+export CLOUD_CODE_URL="https://cloudcode-pa.googleapis.com"
+export JETSKI_CLOUD_CODE_URL="https://cloudcode-pa.googleapis.com"
+export BORG_DISABLE_EXPERIMENTS="CASCADE_DEFAULT_MODEL_OVERRIDE,CASCADE_USE_EXPERIMENT_CHECKPOINTER,CASCADE_NEW_MODELS_NUX,CASCADE_NEW_WAVE_2_MODELS_NUX"
 [ -f /workspace/proxy_config.sh ] && source /workspace/proxy_config.sh
 
 if [ "$USE_PROXY" = "true" ] && { [ "$PROXY_TYPE" = "xray" ] || [ "$PROXY_TYPE" = "hysteria2" ]; }; then
@@ -476,10 +503,15 @@ cd "$TARGET"
 
 echo -e "\e[1;36m[Antigravity]\e[0m  Workspace: $TARGET"
 
-# Check if agy is installed. If not, install it synchronously.
 if ! command -v agy > /dev/null 2>&1 && [ ! -f "$HOME/.local/bin/agy" ]; then
-    echo -e "\e[1;36m[*] Installing Antigravity CLI (first run)...\e[0m"
-    curl -fsSL https://antigravity.google/cli/install.sh | bash
+    echo -e "\e[1;36m[*] Installing Antigravity CLI (v1.1.4 pinned)...\e[0m"
+    mkdir -p "$HOME/.local/bin"
+    curl -# -L -o /tmp/cli.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.4-6277569641840640/linux-arm/cli_linux_arm64.tar.gz"
+    tar -xzf /tmp/cli.tar.gz -C /tmp antigravity
+    mv /tmp/antigravity "$HOME/.local/bin/agy"
+    chmod +x "$HOME/.local/bin/agy"
+    "$HOME/.local/bin/agy" install || true
+    rm -f /tmp/cli.tar.gz
 else
     # Auto-update disabled in background to prevent process conflicts
     true
@@ -515,7 +547,7 @@ START_AGY
 
     # Launch Debian: copy start-agy.sh from workspace then run it
     # shellcheck disable=SC2086
-    proot-distro login debian         $EXTRA_BINDS         --no-kill-on-exit         -- /bin/bash -c 'cp /workspace/start-agy.sh /usr/local/bin/start-agy.sh && chmod +x /usr/local/bin/start-agy.sh && exec /usr/local/bin/start-agy.sh'
+    proot-distro login debian $EXTRA_BINDS --no-kill-on-exit -- /bin/bash -c 'cp /workspace/start-agy.sh /usr/local/bin/start-agy.sh && chmod +x /usr/local/bin/start-agy.sh && exec /usr/local/bin/start-agy.sh'
 }
 do_start() {
     if ! is_initialized; then
@@ -534,6 +566,18 @@ do_update() {
     read -r -p "  Press Enter to continue..."
 }
 
+do_update_patcher() {
+    show_banner
+    log_info "Updating Antigravity Patcher..."
+    if [ -d "$WORKSPACE_DIR/open-antigravity-patcher" ]; then
+        proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "cd /workspace/open-antigravity-patcher && git fetch origin main && git reset --hard origin/main"
+        log_ok "Patcher updated successfully."
+    else
+        log_warn "Patcher not installed yet. It will be installed automatically when you run it."
+    fi
+    read -r -p "  Press Enter to continue..."
+}
+
 do_shell() {
     local EXTRA_BINDS=""
     [ -d "$WORKSPACE_DIR" ] && EXTRA_BINDS="$EXTRA_BINDS --bind $WORKSPACE_DIR:/workspace"
@@ -546,24 +590,30 @@ do_shell() {
 run_patcher() {
     show_banner
     log_info "Checking Antigravity CLI Patcher..."
-    
+
     PATCHER_DIR=""
     if [ -f "$WORKSPACE_DIR/open-antigravity-patcher/source/main.py" ]; then
         PATCHER_DIR="open-antigravity-patcher"
     else
         rm -rf "$WORKSPACE_DIR/open-antigravity-patcher"
     fi
-    
+
     if [ -z "$PATCHER_DIR" ]; then
         log_info "Patcher folder not found in workspace."
         log_info "Cloning from GitHub (requires internet)..."
         if proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /usr/bin/git clone https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher; then
             PATCHER_DIR="open-antigravity-patcher"
+            proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "cd /workspace/open-antigravity-patcher && git checkout b9a01e8e981dc0f02956f06867f1992db10735b5"
         fi
     fi
-    
+
     if [ -n "$PATCHER_DIR" ]; then
-        proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "export TERM=xterm-256color; export PATCHER_DIR=$PATCHER_DIR; python3 /workspace/\$PATCHER_DIR/source/main.py; pkill -9 -x agy 2>/dev/null"
+        # NOTE: do NOT run check_and_patch.py here from Termux python3 — it imports
+        # modules that only exist inside Debian and will hang. The patcher handles
+        # patching itself when launched interactively.
+        export TERM=xterm-256color
+        proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- python3 -u "/workspace/$PATCHER_DIR/source/main.py"
+        pkill -9 -x agy 2>/dev/null || true
     else
         log_error "Patcher not available. Place open-antigravity-patcher folder in your workspace."
         sleep 3
@@ -571,7 +621,12 @@ run_patcher() {
 }
 do_configure_proxy() {
     mkdir -p "$WORKSPACE_DIR"
-    [ -f "$PROXY_CONFIG" ]   && source "$PROXY_CONFIG"
+
+    # Ensure generate_proxy_config.py is available in the workspace
+    if [ -f "$PREFIX/bin/generate_proxy_config.py" ]; then
+        cp "$PREFIX/bin/generate_proxy_config.py" "$WORKSPACE_DIR/generate_proxy_config.py"
+    fi
+    safe_source_proxy
     [ -f "$VLESS_SETTINGS" ] && source "$VLESS_SETTINGS"
 
     while true; do
@@ -783,11 +838,19 @@ else
     echo ""
 fi
 
+# Handle Ctrl+C gracefully in the menu — just redraw instead of exiting
+_menu_sigint() {
+    echo ""
+    log_warn "Press 8 to exit or select a menu option."
+    sleep 1
+}
+
 if read -t 3 -n 1 -r; then
+    trap '_menu_sigint' INT
     while true; do
         show_banner
         local_proxy_status="OFF"
-        [ -f "$PROXY_CONFIG" ] && source "$PROXY_CONFIG"
+        safe_source_proxy
         [ "$USE_PROXY" = "true" ] && local_proxy_status="ON (${PROXY_TYPE})"
         last_dir="(none yet)"
         [ -f "$LAST_DIR_FILE" ] && last_dir=$(cat "$LAST_DIR_FILE")
@@ -800,19 +863,21 @@ if read -t 3 -n 1 -r; then
         echo -e "  ${GREEN}2)${NC} Update Antigravity CLI"
         echo -e "  ${GREEN}3)${NC} Network & Proxy settings"
         echo -e "  ${GREEN}4)${NC} Run Antigravity Patcher"
-        echo -e "  ${GREEN}5)${NC} Open Debian shell"
-        echo -e "  ${GREEN}6)${NC} Reset sandbox"
-        echo -e "  ${GREEN}7)${NC} Exit"
+        echo -e "  ${GREEN}5)${NC} Update Antigravity Patcher"
+        echo -e "  ${GREEN}6)${NC} Open Debian shell"
+        echo -e "  ${GREEN}7)${NC} Reset sandbox"
+        echo -e "  ${GREEN}8)${NC} Exit"
         echo ""
         read -r -p "  > " opt
         case "$opt" in
-            1) do_start ;;
-            2) do_update ;;
-            3) do_configure_proxy ;;
-            4) run_patcher ;;
-            5) do_shell ;;
-            6) do_reset ;;
-            7) exit 0 ;;
+            1) trap '' INT; do_start;         trap '_menu_sigint' INT ;;
+            2) trap '' INT; do_update;        trap '_menu_sigint' INT ;;
+            3) trap '' INT; do_configure_proxy; trap '_menu_sigint' INT ;;
+            4) trap '' INT; run_patcher;      trap '_menu_sigint' INT ;;
+            5) trap '' INT; do_update_patcher; trap '_menu_sigint' INT ;;
+            6) trap '' INT; do_shell;         trap '_menu_sigint' INT ;;
+            7) trap '' INT; do_reset;         trap '_menu_sigint' INT ;;
+            8) exit 0 ;;
             *) log_warn "Invalid option."; sleep 1 ;;
         esac
     done
