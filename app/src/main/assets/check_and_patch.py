@@ -43,9 +43,11 @@ class CompositeGate:
         return ("unpatched", 0)
 
     def write_patches(self, f, data):
+        f.seek(0)
+        content = f.read()
         for g in self.gates:
             try:
-                kind, off = g.find(data)
+                kind, off = g.find(content)
                 if kind == "unpatched" or kind == "patched":
                     f.seek(off)
                     f.write(g.fix)
