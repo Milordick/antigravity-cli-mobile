@@ -469,7 +469,8 @@ public final class TerminalView extends View {
         int rowsInHistory = mEmulator.getScreen().getActiveTranscriptRows();
         if (mTopRow < -rowsInHistory) mTopRow = -rowsInHistory;
 
-        if (isSelectingText() || mEmulator.isAutoScrollDisabled()) {
+        boolean autoScrollDisabled = mEmulator.isAutoScrollDisabled() || mTopRow < 0;
+        if (isSelectingText() || autoScrollDisabled) {
 
             // Do not scroll when selecting text.
             int rowShift = mEmulator.getScrollCounter();
@@ -479,14 +480,16 @@ public final class TerminalView extends View {
                 if (isSelectingText())
                     stopTextSelectionMode();
 
-                if (mEmulator.isAutoScrollDisabled()) {
+                if (autoScrollDisabled) {
                     mTopRow = -rowsInHistory;
                     skipScrolling = true;
                 }
             } else {
                 skipScrolling = true;
                 mTopRow -= rowShift;
-                decrementYTextSelectionCursors(rowShift);
+                if (isSelectingText()) {
+                    decrementYTextSelectionCursors(rowShift);
+                }
             }
         }
 

@@ -14,10 +14,7 @@ patcher_dir = "/workspace/open-antigravity-patcher"
 if not os.path.exists(os.path.join(patcher_dir, "source/main.py")):
     print("[*] Cloning open-antigravity-patcher from GitHub...")
     subprocess.run(["git", "clone", "https://github.com/AvenCores/open-antigravity-patcher.git", patcher_dir])
-
-# Force update to latest disabled per user request
-# subprocess.run(["git", "-C", patcher_dir, "fetch", "origin", "main"], stderr=subprocess.DEVNULL)
-# subprocess.run(["git", "-C", patcher_dir, "reset", "--hard", "origin/main"], stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", patcher_dir, "checkout", "b9a01e8e981dc0f02956f06867f1992db10735b5"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 # Hotfix the patcher for linux_arm64 signature (tbz w3 vs tbnz w3)
 patcher_file = os.path.join(patcher_dir, "source/patcher/agy/patcher.py")
