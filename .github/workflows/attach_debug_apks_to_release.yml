@@ -28,9 +28,6 @@ jobs:
         run: |
           exit_on_error() {
               echo "$1"
-              echo "Deleting '$RELEASE_VERSION_NAME' release and '$GITHUB_REF' tag"
-              hub release delete "$RELEASE_VERSION_NAME"
-              git push --delete origin "$GITHUB_REF"
               exit 1
           }
 
