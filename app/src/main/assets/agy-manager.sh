@@ -504,18 +504,22 @@ cd "$TARGET"
 echo -e "\e[1;36m[Antigravity]\e[0m  Workspace: $TARGET"
 
 if ! command -v agy > /dev/null 2>&1 && [ ! -f "$HOME/.local/bin/agy" ]; then
-    echo -e "\e[1;36m[*] Installing Antigravity CLI (v1.1.4 pinned)...\e[0m"
+    echo -e "\e[1;36m[*] Installing Antigravity CLI (v1.1.5 pinned)...\e[0m"
     mkdir -p "$HOME/.local/bin"
-    curl -# -L -o /tmp/cli.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.4-6277569641840640/linux-arm/cli_linux_arm64.tar.gz"
-    tar -xzf /tmp/cli.tar.gz -C /tmp antigravity
-    mv /tmp/antigravity "$HOME/.local/bin/agy"
-    chmod +x "$HOME/.local/bin/agy"
+    curl -# -L -o /tmp/cli.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.5-6277569641840640/linux-arm/cli_linux_arm64.tar.gz" 2>/dev/null || \
+    curl -# -L -o /tmp/cli.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.4-6277569641840640/linux-arm/cli_linux_arm64.tar.gz" 2>/dev/null || \
+    curl -fsSL https://antigravity.google/cli/install.sh | bash
+    if [ -f /tmp/cli.tar.gz ]; then
+        tar -xzf /tmp/cli.tar.gz -C /tmp antigravity 2>/dev/null || true
+        [ -f /tmp/antigravity ] && mv /tmp/antigravity "$HOME/.local/bin/agy"
+        rm -f /tmp/cli.tar.gz
+    fi
+    chmod 755 "$HOME/.local/bin/agy" 2>/dev/null || true
     "$HOME/.local/bin/agy" install || true
-    rm -f /tmp/cli.tar.gz
-else
-    # Auto-update disabled in background to prevent process conflicts
-    true
 fi
+
+# Smart Lock: Prevent background self-update by making the binary read-only
+[ -f "$HOME/.local/bin/agy" ] && chmod 555 "$HOME/.local/bin/agy" 2>/dev/null || true
 
 # Run the auto-patcher Python script
 if [ -f /workspace/check_and_patch.py ]; then
@@ -561,7 +565,7 @@ do_update() {
     show_banner
     log_info "Updating Antigravity CLI inside Debian..."
     proot-distro login debian -- /bin/bash -c \
-        'export PATH="$HOME/.local/bin:$PATH"; curl -fsSL https://antigravity.google/cli/install.sh | bash'
+        'export PATH="$HOME/.local/bin:$PATH"; [ -f "$HOME/.local/bin/agy" ] && chmod 755 "$HOME/.local/bin/agy"; curl -fsSL https://antigravity.google/cli/install.sh | bash; [ -f "$HOME/.local/bin/agy" ] && chmod 555 "$HOME/.local/bin/agy"'
     log_ok "Update done."
     read -r -p "  Press Enter to continue..."
 }
