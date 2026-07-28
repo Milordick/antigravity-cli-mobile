@@ -537,9 +537,10 @@ cd "$TARGET"
 
 echo -e "\e[1;36m[Antigravity]\e[0m  Workspace: $TARGET"
 
-if ! command -v agy > /dev/null 2>&1 && [ ! -f "$HOME/.local/bin/agy" ]; then
-    echo -e "\e[1;36m[*] Installing Antigravity CLI (v1.1.7 pinned)...\e[0m"
+do_install_117() {
+    echo -e "\e[1;36m[*] Downloading Antigravity CLI (v1.1.7 pinned)...\e[0m"
     mkdir -p "$HOME/.local/bin"
+    rm -f "$HOME/.local/bin/agy" 2>/dev/null || true
     curl -# -L -o /tmp/cli.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.7-5951805767680000/linux-arm/cli_linux_arm64.tar.gz" 2>/dev/null || \
     curl -# -L -o /tmp/cli.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.4-6277569641840640/linux-arm/cli_linux_arm64.tar.gz" 2>/dev/null || \
     curl -fsSL https://antigravity.google/cli/install.sh | bash
@@ -550,15 +551,29 @@ if ! command -v agy > /dev/null 2>&1 && [ ! -f "$HOME/.local/bin/agy" ]; then
     fi
     chmod 755 "$HOME/.local/bin/agy" 2>/dev/null || true
     "$HOME/.local/bin/agy" install || true
+}
+
+if ! command -v agy > /dev/null 2>&1 && [ ! -f "$HOME/.local/bin/agy" ]; then
+    do_install_117
 fi
 
-# Defense Layer: Smart Lock on binary file
-[ -f "$HOME/.local/bin/agy" ] && chmod 555 "$HOME/.local/bin/agy" 2>/dev/null || true
+# Ensure binary is writable before running patcher
+[ -f "$HOME/.local/bin/agy" ] && chmod 755 "$HOME/.local/bin/agy" 2>/dev/null || true
 
 # Run the auto-patcher Python script
 if [ -f /workspace/check_and_patch.py ]; then
     python3 /workspace/check_and_patch.py
 fi
+
+# Self-healing check: if binary cannot execute, re-download 1.1.7 and re-patch
+if [ -f "$HOME/.local/bin/agy" ] && ! "$HOME/.local/bin/agy" --version >/dev/null 2>&1; then
+    echo -e "\e[33m[*] Binary verification failed. Re-installing clean 1.1.7 binary...\e[0m"
+    do_install_117
+    [ -f /workspace/check_and_patch.py ] && python3 /workspace/check_and_patch.py
+fi
+
+# Defense Layer: Smart Lock on binary file
+[ -f "$HOME/.local/bin/agy" ] && chmod 555 "$HOME/.local/bin/agy" 2>/dev/null || true
 
 if command -v agy > /dev/null 2>&1; then
     agy "$@"
