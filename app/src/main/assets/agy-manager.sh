@@ -355,6 +355,23 @@ export PATH="$HOME/.local/bin:$PATH"
 export CLOUD_CODE_URL="https://cloudcode-pa.googleapis.com"
 export JETSKI_CLOUD_CODE_URL="https://cloudcode-pa.googleapis.com"
 export BORG_DISABLE_EXPERIMENTS="CASCADE_DEFAULT_MODEL_OVERRIDE,CASCADE_USE_EXPERIMENT_CHECKPOINTER,CASCADE_NEW_MODELS_NUX,CASCADE_NEW_WAVE_2_MODELS_NUX"
+export ANTIGRAVITY_DISABLE_AUTO_UPDATE="1"
+export ANTIGRAVITY_NO_AUTO_UPDATE="true"
+export DISABLE_AUTO_UPDATE="true"
+export AGY_DISABLE_AUTO_UPDATE="1"
+export CHECK_FOR_UPDATES="false"
+
+# Defense Layer: Lock staging cache directory to block payload extraction
+mkdir -p "$HOME/.cache/antigravity" 2>/dev/null || true
+if [ -d "$HOME/.cache/antigravity/staging" ]; then
+    rm -rf "$HOME/.cache/antigravity/staging" 2>/dev/null || true
+fi
+touch "$HOME/.cache/antigravity/staging" 2>/dev/null || true
+chmod 000 "$HOME/.cache/antigravity/staging" 2>/dev/null || true
+
+# Defense Layer: Block auto-updater endpoint in /etc/hosts
+grep -q 'antigravity-cli-auto-updater' /etc/hosts 2>/dev/null || echo "127.0.0.1 antigravity-cli-auto-updater-974169037036.us-central1.run.app" >> /etc/hosts 2>/dev/null || true
+
 [ -f /workspace/proxy_config.sh ] && source /workspace/proxy_config.sh
 
 if [ "$USE_PROXY" = "true" ] && [ "$PROXY_TYPE" = "xray" ]; then
@@ -436,6 +453,23 @@ export PATH="$HOME/.local/bin:$PATH"
 export CLOUD_CODE_URL="https://cloudcode-pa.googleapis.com"
 export JETSKI_CLOUD_CODE_URL="https://cloudcode-pa.googleapis.com"
 export BORG_DISABLE_EXPERIMENTS="CASCADE_DEFAULT_MODEL_OVERRIDE,CASCADE_USE_EXPERIMENT_CHECKPOINTER,CASCADE_NEW_MODELS_NUX,CASCADE_NEW_WAVE_2_MODELS_NUX"
+export ANTIGRAVITY_DISABLE_AUTO_UPDATE="1"
+export ANTIGRAVITY_NO_AUTO_UPDATE="true"
+export DISABLE_AUTO_UPDATE="true"
+export AGY_DISABLE_AUTO_UPDATE="1"
+export CHECK_FOR_UPDATES="false"
+
+# Defense Layer: Lock staging cache directory to block payload extraction
+mkdir -p "$HOME/.cache/antigravity" 2>/dev/null || true
+if [ -d "$HOME/.cache/antigravity/staging" ]; then
+    rm -rf "$HOME/.cache/antigravity/staging" 2>/dev/null || true
+fi
+touch "$HOME/.cache/antigravity/staging" 2>/dev/null || true
+chmod 000 "$HOME/.cache/antigravity/staging" 2>/dev/null || true
+
+# Defense Layer: Block auto-updater endpoint in /etc/hosts
+grep -q 'antigravity-cli-auto-updater' /etc/hosts 2>/dev/null || echo "127.0.0.1 antigravity-cli-auto-updater-974169037036.us-central1.run.app" >> /etc/hosts 2>/dev/null || true
+
 [ -f /workspace/proxy_config.sh ] && source /workspace/proxy_config.sh
 
 if [ "$USE_PROXY" = "true" ] && { [ "$PROXY_TYPE" = "xray" ] || [ "$PROXY_TYPE" = "hysteria2" ]; }; then
@@ -504,9 +538,9 @@ cd "$TARGET"
 echo -e "\e[1;36m[Antigravity]\e[0m  Workspace: $TARGET"
 
 if ! command -v agy > /dev/null 2>&1 && [ ! -f "$HOME/.local/bin/agy" ]; then
-    echo -e "\e[1;36m[*] Installing Antigravity CLI (v1.1.5 pinned)...\e[0m"
+    echo -e "\e[1;36m[*] Installing Antigravity CLI (v1.1.7 pinned)...\e[0m"
     mkdir -p "$HOME/.local/bin"
-    curl -# -L -o /tmp/cli.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.5-6277569641840640/linux-arm/cli_linux_arm64.tar.gz" 2>/dev/null || \
+    curl -# -L -o /tmp/cli.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.7-5951805767680000/linux-arm/cli_linux_arm64.tar.gz" 2>/dev/null || \
     curl -# -L -o /tmp/cli.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.4-6277569641840640/linux-arm/cli_linux_arm64.tar.gz" 2>/dev/null || \
     curl -fsSL https://antigravity.google/cli/install.sh | bash
     if [ -f /tmp/cli.tar.gz ]; then
@@ -518,7 +552,7 @@ if ! command -v agy > /dev/null 2>&1 && [ ! -f "$HOME/.local/bin/agy" ]; then
     "$HOME/.local/bin/agy" install || true
 fi
 
-# Smart Lock: Prevent background self-update by making the binary read-only
+# Defense Layer: Smart Lock on binary file
 [ -f "$HOME/.local/bin/agy" ] && chmod 555 "$HOME/.local/bin/agy" 2>/dev/null || true
 
 # Run the auto-patcher Python script
@@ -565,7 +599,7 @@ do_update() {
     show_banner
     log_info "Updating Antigravity CLI inside Debian..."
     proot-distro login debian -- /bin/bash -c \
-        'export PATH="$HOME/.local/bin:$PATH"; [ -f "$HOME/.local/bin/agy" ] && chmod 755 "$HOME/.local/bin/agy"; curl -fsSL https://antigravity.google/cli/install.sh | bash; [ -f "$HOME/.local/bin/agy" ] && chmod 555 "$HOME/.local/bin/agy"'
+        'export PATH="$HOME/.local/bin:$PATH"; rm -f "$HOME/.cache/antigravity/staging" 2>/dev/null; [ -f "$HOME/.local/bin/agy" ] && chmod 755 "$HOME/.local/bin/agy"; curl -fsSL https://antigravity.google/cli/install.sh | bash; [ -f "$HOME/.local/bin/agy" ] && chmod 555 "$HOME/.local/bin/agy"'
     log_ok "Update done."
     read -r -p "  Press Enter to continue..."
 }

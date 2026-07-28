@@ -113,3 +113,22 @@ try:
 except Exception as e:
     print(f"[!] Patcher check failed: {e}")
 
+# Neutralize embedded auto-updater URL in binary
+try:
+    with open(bin_path, "rb") as f:
+        bindata = f.read()
+
+    updater_url = b"https://antigravity-cli-auto-updater-974169037036.us-central1.run.app"
+    disabled_url = b"http://127.0.0.1:9999/disabled-auto-updater-server-url-disabled"
+
+    if updater_url in bindata:
+        print("[*] Neutralizing embedded auto-updater URL in agy binary...")
+        new_bindata = bindata.replace(updater_url, disabled_url)
+        with open(bin_path, "wb") as f:
+            f.write(new_bindata)
+        print("[OK] Embedded auto-updater URL successfully neutralized.")
+    else:
+        print("[OK] Embedded auto-updater URL is already neutralized.")
+except Exception as e:
+    print(f"[!] Auto-updater neutralization note: {e}")
+
