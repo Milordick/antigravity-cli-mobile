@@ -911,19 +911,19 @@ if [ "\$M_CHOICE" = "1" ]; then
     sed -i -E 's|(deb|ftp)\.debian\.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
     sed -i -E 's|(deb|ftp)\.debian\.org|mirror.yandex.ru|g' /etc/apt/sources.list 2>/dev/null || true
     MIRRORS=(
+        "https://github.com/google-antigravity/antigravity-cli/releases/download/\${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://ghfast.top/https://github.com/google-antigravity/antigravity-cli/releases/download/\${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://ghproxy.net/https://github.com/google-antigravity/antigravity-cli/releases/download/\${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://gh-proxy.com/https://github.com/google-antigravity/antigravity-cli/releases/download/\${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
-        "https://github.com/google-antigravity/antigravity-cli/releases/download/\${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
     )
 elif [ "\$M_CHOICE" = "3" ]; then
     sed -i -E 's|(deb|ftp)\.debian\.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
     sed -i -E 's|(deb|ftp)\.debian\.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list 2>/dev/null || true
     MIRRORS=(
+        "https://github.com/google-antigravity/antigravity-cli/releases/download/\${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://ghproxy.net/https://github.com/google-antigravity/antigravity-cli/releases/download/\${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://gh-proxy.com/https://github.com/google-antigravity/antigravity-cli/releases/download/\${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://ghfast.top/https://github.com/google-antigravity/antigravity-cli/releases/download/\${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
-        "https://github.com/google-antigravity/antigravity-cli/releases/download/\${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
     )
 else
     MIRRORS=(
@@ -1393,17 +1393,17 @@ readonly AGY_VERSION
 
 if [ "$M_CHOICE" = "1" ]; then
     MIRRORS=(
+        "https://github.com/google-antigravity/antigravity-cli/releases/download/${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://ghfast.top/https://github.com/google-antigravity/antigravity-cli/releases/download/${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://ghproxy.net/https://github.com/google-antigravity/antigravity-cli/releases/download/${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://gh-proxy.com/https://github.com/google-antigravity/antigravity-cli/releases/download/${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
-        "https://github.com/google-antigravity/antigravity-cli/releases/download/${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
     )
 elif [ "$M_CHOICE" = "3" ]; then
     MIRRORS=(
+        "https://github.com/google-antigravity/antigravity-cli/releases/download/${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://ghproxy.net/https://github.com/google-antigravity/antigravity-cli/releases/download/${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://gh-proxy.com/https://github.com/google-antigravity/antigravity-cli/releases/download/${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
         "https://ghfast.top/https://github.com/google-antigravity/antigravity-cli/releases/download/${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
-        "https://github.com/google-antigravity/antigravity-cli/releases/download/${AGY_VERSION}/agy_cli_linux_arm64.tar.gz"
     )
 else
     MIRRORS=(
