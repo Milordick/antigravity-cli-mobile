@@ -56,6 +56,36 @@ if [ "$1" == "--in-app" ]; then
     IN_APP_MODE="true"
 fi
 
+# ── UI safety helpers ────────────────────────────────────────────────────────
+# drain_stdin: выбросить залипшие нажатия из буфера, чтобы следующий промпт
+# (read -rsn1 / read -t) не проскакивал на старых клавишах, набитых во время
+# анимаций спиннеров (там ввод не читается и копится).
+# Только для TTY: пайпнутый stdin (автоматизация) не трогаем.
+drain_stdin() { [ -t 0 ] || return 0; local _d; while read -t 0 -rsn1 _d 2>/dev/null; do :; done; }
+
+# cell_width: видимая ширина строки в клетках терминала.
+# ${#var} считает символы: эмодзи W-класса (📂📁🌐🔄🛠🗙🗄📦 — 1 символ, 2 клетки)
+# дают +1, а U+FE0F (VS16, напр. в 🛠️) — 0 клеток при 1 символе, даёт −1.
+# Остальное (─ │ █ ▒ ● ○ ▶ ◀ • ✓ ✗ ✔ ↵ ↩) — 1 символ = 1 клетка, поправок нет.
+cell_width() {
+    local s; s=$(strip_ansi "$1")
+    local w=${#s} tmp c e
+    for e in "📂" "📁" "🌐" "🔄" "🛠" "🗙" "🗄" "📦"; do
+        tmp=${s//"$e"/}; c=$(( (${#s} - ${#tmp}) / ${#e} ))
+        w=$((w + c))
+    done
+    tmp=${s//$'\uFE0F'/}; w=$((w - (${#s} - ${#tmp})))
+    echo "$w"
+}
+
+# Гарантированно выйти из alternate screen и вернуть курсор при ЛЮБОМ выходе,
+# включая Ctrl+C в меню/анимациях (иначе терминал остаётся пустым со скрытым
+# курсором). Команды идемпотентны — безопасны и при штатном завершении.
+# INT/TERM завершают скрипт кодом 130: иначе после trapped-прерывания во время
+# read цикл меню продолжил бы работу и трактовал бы Ctrl+C как Enter.
+trap 'printf "\e[?1049l\e[?25h"' EXIT
+trap 'printf "\e[?1049l\e[?25h"; exit 130' INT TERM
+
 get_console_width() {
     local w
     w=$(stty size 2>/dev/null | awk '{print $2}')
@@ -72,7 +102,9 @@ get_console_width() {
 }
 
 strip_ansi() {
-    echo -e "$1" | sed -r 's/\x1B\[[0-9;]*[a-zA-Z]//g'
+    # printf, а не echo -e: иначе \-последовательности в тексте (напр. имена
+    # папок) интерпретируются и ломают подсчёт ширины/вёрстку строк.
+    printf '%s' "$1" | sed -r 's/\x1B\[[0-9;]*[a-zA-Z]//g'
 }
 
 print_spaces() {
@@ -112,10 +144,13 @@ print_shades() {
 show_header() {
     clear
     echo ""
-    local rawWidth=$(stty size 2>/dev/null | awk '{print $2}')
-    [ -z "$rawWidth" ] && rawWidth=80
+    # Единый кламп [35..120] как в get_console_width: иначе на терминалах шире
+    # 120 шапка расползается (панель/меню клампятся), а уже 33 — рваная рамка.
+    local rawWidth=$(get_console_width)
     local isMobile="false"
-    if [ "$rawWidth" -lt 65 ]; then
+    # Тот же порог, что у панели/меню (innerWidth<68 ⇔ W<72): на 65–71 колонках
+    # раньше рисовалось десктопное лого с мобильной панелью.
+    if [ "$rawWidth" -lt 72 ]; then
         isMobile="true"
     fi
     local innerWidth=$((rawWidth - 4))
@@ -361,6 +396,7 @@ bootloader_timer() {
     echo ""
     
     printf '\e[?25l'
+    drain_stdin # сбросить залипший ввод, иначе таймер мгновенно скипнется
     
     local total_ms=30
     # Адаптивная ширина бара — гарантированно влезает в innerWidth без переноса
@@ -416,16 +452,19 @@ invoke_menu() {
     [ "$innerWidth" -lt 68 ] && isMobile="true"
 
     local maxOptLen=0
+    # Ширина каждого пункта в КЛЕТКАХ (cell_width): ${#} врёт на эмодзи
+    # (📂/🛠️ = 2 клетки), иначе рамка выделения получается рваной.
+    local -a optW=()
     for opt in "${options[@]}"; do
-        local r=$(strip_ansi "$opt"); [ ${#r} -gt $maxOptLen ] && maxOptLen=${#r}
+        local w; w=$(cell_width "$opt"); optW+=("$w")
+        [ "$w" -gt "$maxOptLen" ] && maxOptLen=$w
     done
     local lpc=$((1 + (innerWidth + 2 - maxOptLen - 7) / 2))
     [ "$lpc" -lt 1 ] && lpc=1
     local lPad=$(print_spaces $lpc)
 
     local tFull="${G2}${C_BOLD}[ ${title} ]${C_RESET}"
-    local tRaw=$(strip_ansi "$tFull")
-    local td=$((innerWidth + 2 - ${#tRaw} - 2)); [ "$td" -lt 2 ] && td=2
+    local td=$((innerWidth + 2 - $(cell_width "$tFull") - 2)); [ "$td" -lt 2 ] && td=2
     local dashL=$((td / 2)); local dashR=$((td - dashL))
 
     local controls
@@ -438,23 +477,25 @@ invoke_menu() {
             && controls="${G2}[ ↑ / ↓ ] Navigate${C_RESET}   ${G_GRAY}•${C_RESET}   ${G_GREEN}[ ENTER ] Select${C_RESET}   ${G_GRAY}•${C_RESET}   ${G_RED}[ ESC ] Close Overlay${C_RESET}" \
             || controls="${G2}[ ↑ / ↓ ] Navigate${C_RESET}   ${G_GRAY}•${C_RESET}   ${G_GREEN}[ ENTER ] Select${C_RESET}   ${G_GRAY}•${C_RESET}   ${G_RED}[ ESC ] Back/Exit${C_RESET}"
     fi
-    local cRaw=$(strip_ansi "$controls")
-    local cpl=$((1 + (innerWidth + 2 - ${#cRaw}) / 2)); [ "$cpl" -lt 1 ] && cpl=1
+    local cpl=$((1 + (innerWidth + 2 - $(cell_width "$controls")) / 2)); [ "$cpl" -lt 1 ] && cpl=1
 
     # ── Draw EVERYTHING (static parts + items + footer) ───────────────────────
     show_header
     show_status_panel
-    echo -e " ${G_GRAY}$(print_dashes $dashL) ${tFull} ${G_GRAY}$(print_dashes $dashR)${C_RESET}"
+    # printf вместо echo -e: \-последовательности в заголовке (пути из
+    # файлбраузера) не должны интерпретироваться и рвать вёрстку.
+    printf '%s\n' " ${G_GRAY}$(print_dashes $dashL) ${tFull} ${G_GRAY}$(print_dashes $dashR)${C_RESET}"
     echo ""
 
     for ((i=0; i<optCount; i++)); do
         local optText="${options[$i]}"
-        local rawOpt=$(strip_ansi "$optText")
-        local padRight=$(print_spaces $((maxOptLen - ${#rawOpt})))
+        local padRight=$(print_spaces $((maxOptLen - optW[i])))
         if [ "$i" -eq "$selectedIndex" ]; then
             echo -e "${lPad}${G1}${C_BOLD}▶  ${BG_SELECT}${G_WHITE}${C_BOLD} ${optText}${padRight} ${C_RESET}${G1}${C_BOLD} ◀${C_RESET}"
         else
-            echo -e "${lPad}${G_GRAY}   │ ${C_RESET}${optText}"
+            # Префикс ровно 4 клетки ("  │ ") — текст начинается там же, где у
+            # выбранного пункта после "▶  "+пробела подсветки (было 5, «лесенка»).
+            echo -e "${lPad}${G_GRAY}  │ ${C_RESET}${optText}"
         fi
     done
     # Footer (3 lines: empty + dashes + controls)
@@ -485,19 +526,21 @@ invoke_menu() {
     _upd() {
         local idx=$1 sel=$2
         local optText="${options[$idx]}"
-        local rawOpt=$(strip_ansi "$optText")
-        local padRight=$(print_spaces $((maxOptLen - ${#rawOpt})))
+        local padRight=$(print_spaces $((maxOptLen - optW[idx])))
         printf '\e[%d;1H' "$((item0_row + idx))"
         printf '\e[2K'
         if [ "$sel" = "1" ]; then
             printf '%s' "${lPad}${G1}${C_BOLD}▶  ${BG_SELECT}${G_WHITE}${C_BOLD} ${optText}${padRight} ${C_RESET}${G1}${C_BOLD} ◀${C_RESET}"
         else
-            printf '%s' "${lPad}${G_GRAY}   │ ${C_RESET}${optText}"
+            printf '%s' "${lPad}${G_GRAY}  │ ${C_RESET}${optText}"
         fi
         printf '\e[%d;1H' "$_fr"
     }
 
     # ── Input loop ────────────────────────────────────────────────────────────
+    # Сбросить залипший ввод (набитый во время прошлых анимаций), иначе первое
+    # нажатие «съедается» ещё до того, как пользователь что-то нажал.
+    drain_stdin
     while true; do
         read -rsn1 key
         if [[ $key == $'\e' ]]; then
@@ -529,9 +572,19 @@ invoke_filebrowser() {
         local options=("${G_GREEN}${C_BOLD}[ ✔ ] SELECT DIRECTORY${C_RESET}" "${G_WARN}[ ↵ ] .. (Go Up)${C_RESET}")
         local dirs=()
         
+        # -A: включая dot-папки (кроме . и ..); @: симлинки — берём только те,
+        # что ведут в каталоги (у symlinked dir ls ставит @, а не /).
         while IFS= read -r d; do
-            [ -n "$d" ] && dirs+=("$d")
-        done < <(ls -1F "$current_path" 2>/dev/null | grep '/$' | sed 's/\/$//')
+            [ -n "$d" ] || continue
+            if [[ "$d" == *@ ]]; then
+                d="${d%@}"
+                [ -d "$current_path/$d" ] || continue
+            else
+                d="${d%/}"
+            fi
+            [[ "$d" == "." || "$d" == ".." ]] && continue
+            dirs+=("$d")
+        done < <(ls -1AF "$current_path" 2>/dev/null | grep -E '/$|@$')
         
         for d in "${dirs[@]}"; do
             options+=("${G_WHITE}[ 📁 ] $d${C_RESET}")
@@ -601,9 +654,17 @@ restart_proxy_core() {
     pkill -x hysteria >/dev/null 2>&1 || true
     if [ "$USE_PROXY" = "true" ]; then
         if [ "$PROXY_TYPE" = "xray" ] && [ -f /workspace/xray_config.json ]; then
-            nohup /usr/local/bin/xray run -c /workspace/xray_config.json >/tmp/xray.log 2>&1 &
+            if [ -x /usr/local/bin/xray ]; then
+                nohup /usr/local/bin/xray run -c /workspace/xray_config.json >/tmp/xray.log 2>&1 &
+            else
+                echo -e " ${G_RED}[!] xray core missing — proxy NOT started, traffic would go direct.${C_RESET}"
+            fi
         elif [ "$PROXY_TYPE" = "hysteria2" ] && [ -f /workspace/hysteria_config.json ]; then
-            nohup /usr/local/bin/hysteria -c /workspace/hysteria_config.json client >/tmp/hysteria.log 2>&1 &
+            if [ -x /usr/local/bin/hysteria ]; then
+                nohup /usr/local/bin/hysteria -c /workspace/hysteria_config.json client >/tmp/hysteria.log 2>&1 &
+            else
+                echo -e " ${G_RED}[!] hysteria core missing — proxy NOT started, traffic would go direct.${C_RESET}"
+            fi
         fi
     fi
 }
@@ -611,11 +672,13 @@ restart_proxy_core() {
 restart_session() {
     clear
     show_header
-    echo -e " ${G2}[*] Restarting Antigravity with new settings...${C_RESET}"
-    echo -e " ${G_GRAY}Please wait...${C_RESET}"
+    echo -e " ${G2}[*] Closing Antigravity session...${C_RESET}"
+    echo -e " ${G_GRAY}Settings are saved. Reopen the app to start a new session.${C_RESET}"
     sleep 1
-    touch "$WORKSPACE_DIR/.restart_requested"
-    # Kill the tmux session — forces do_start_inner to re-run from Termux
+    # NOTE: do_start_inner заканчивается exec (tmux/bash) и никогда не
+    # возвращается, поэтому никакой внутрискриптовый цикл не может прочитать
+    # флаг рестарта — перезапуск делает только сторона приложения. Здесь —
+    # честная остановка, а не обещание рестарта, которого не будет.
     tmux kill-session -t agy_session 2>/dev/null || true
     pkill -9 -x agy 2>/dev/null || true
     exit 0
@@ -658,7 +721,7 @@ do_init() {
     echo -e "  \e[97m3.\e[0m Asia              \e[90m(Tsinghua, ghproxy)\e[0m"
     echo ""
     echo -n -e "  \e[38;5;51mSelect your region (1-3) [1]:\e[0m "
-    read -t 15 -r m_choice || m_choice="1"
+    drain_stdin; read -t 15 -r m_choice || m_choice="1"
     [ -z "$m_choice" ] && m_choice="1"
     mkdir -p "$WORKSPACE_DIR"
     echo "$m_choice" > "$WORKSPACE_DIR/.mirror_region"
@@ -708,6 +771,12 @@ EOF
         local w=24
         local filled=$(( w * p / 100 ))
         local empty=$(( w - filled ))
+        # Адаптация под узкие экраны: строка статуса "[ f ] msg(≤23) sub" иначе
+        # врапится (<54 кол.), а \r\e[2K чистит только последнюю визуальную
+        # строку — мусор копится каждый кадр. Фикс. часть строки = 32 клетки.
+        local _cw=$(stty size 2>/dev/null | awk '{print $2}'); [ -z "$_cw" ] && _cw=80
+        local _maxsub=$((_cw - 32)); [ "$_maxsub" -lt 0 ] && _maxsub=0
+        sub="${sub:0:$_maxsub}"
         
         printf "\e[s"
         printf "\e[1;1H\e[2K\n\e[2K  \e[38;5;51m\e[1m[ INSTALLING ANTIGRAVITY ]\e[0m\n\e[2K  \e[38;5;45m"
@@ -725,6 +794,7 @@ EOF
 
     spin_run_host() {
         local msg="$1"; shift
+        local rc=0
         CURRENT_STEP=$((CURRENT_STEP + 1))
         local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
         printf '\e[?25l'
@@ -739,8 +809,7 @@ EOF
             i=$((i+1))
             sleep 0.08
         done
-        wait "$pid" || rc=$?
-        rc=${rc:-0}
+        wait "$pid"; rc=$?
         draw_ui "$msg" "✓" ""
         if [ $rc -eq 0 ]; then
             printf '\r\e[2K  \e[38;5;46m[ ✓ ]\e[0m %s\n' "$msg"
@@ -783,6 +852,10 @@ draw_ui() {
     local w=24
     local filled=\$(( w * p / 100 ))
     local empty=\$(( w - filled ))
+    # Адаптация под узкие экраны: см. комментарий в draw_ui do_init.
+    local _cw=\$(stty size 2>/dev/null | awk '{print \$2}'); [ -z "\$_cw" ] && _cw=80
+    local _maxsub=\$((_cw - 32)); [ "\$_maxsub" -lt 0 ] && _maxsub=0
+    sub="\${sub:0:\$_maxsub}"
     
     printf "\e[s"
     printf "\e[1;1H\e[2K\n\e[2K  \e[38;5;51m\e[1m[ INSTALLING ANTIGRAVITY ]\e[0m\n\e[2K  \e[38;5;45m"
@@ -800,6 +873,7 @@ draw_ui() {
 
 spin_run() {
     local msg="\$1"; shift
+    local rc=0
     CURRENT_STEP=\$((CURRENT_STEP + 1))
     local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     printf '\e[?25l'
@@ -814,8 +888,7 @@ spin_run() {
         i=\$((i+1))
         sleep 0.08
     done
-    wait "\$pid" || rc=\$?
-    rc=\${rc:-0}
+    wait "\$pid"; rc=\$?
     draw_ui "\$msg" "✓" ""
     if [ \$rc -eq 0 ]; then
         printf '\r\e[2K  \e[38;5;46m[ ✓ ]\e[0m %s\n' "\$msg"
@@ -873,7 +946,13 @@ download_engine() {
     done
     return 1
 }
+# Целостность архива до распаковки: раньше битый тарболл умирал только на tar.
+verify_engine() {
+    [ -s /tmp/agy_cli.tar.gz ] || return 1
+    tar tzf /tmp/agy_cli.tar.gz 2>/dev/null | grep -qE '(^|/)(antigravity|agy)$' || return 1
+}
 spin_run "Downloading Antigravity Engine" download_engine
+spin_run "Verifying Engine Archive" verify_engine
 spin_run "Extracting Engine Archives" tar -xzf /tmp/agy_cli.tar.gz -C /tmp/
 
 _do_install() {
@@ -884,7 +963,7 @@ _do_install() {
     elif [ -f /tmp/agy_cli_linux_arm64/antigravity ]; then
         mv /tmp/agy_cli_linux_arm64/antigravity "\$HOME/.local/bin/agy"
     else
-        find /tmp -name 'antigravity' -o -name 'agy' -type f 2>/dev/null | head -1 | xargs -I{} mv {} "\$HOME/.local/bin/agy" || true
+        find /tmp \( -name 'antigravity' -o -name 'agy' \) -type f 2>/dev/null | head -1 | xargs -I{} mv {} "\$HOME/.local/bin/agy" || true
     fi
     chmod +x "\$HOME/.local/bin/agy" 2>/dev/null || true
     rm -rf /tmp/agy_cli.tar.gz /tmp/agy_cli_linux_arm64
@@ -904,6 +983,21 @@ DEBIAN_SETUP
 do_start_inner() {
     [ -f "$PROXY_CONFIG" ] && source "$PROXY_CONFIG"
 
+    # Если бинаря нет (удалён вручную после установки) — не уходим в вечный
+    # цикл run-agy.sh с голым bash, а чиним через do_update и едем дальше.
+    # Путь фиксирован на /root: внутри контейнера логин всегда root.
+    local _agy_ok="false"
+    if [ "$IN_APP_MODE" = "true" ]; then
+        [ -x /root/.local/bin/agy ] && _agy_ok="true"
+    else
+        proot-distro login debian -- test -x /root/.local/bin/agy 2>/dev/null && _agy_ok="true"
+    fi
+    if [ "$_agy_ok" != "true" ]; then
+        echo -e " ${G_WARN}[!] agy binary missing — running update to reinstall...${C_RESET}"
+        sleep 1
+        do_update || return $?
+    fi
+
     local activeDir="$WORKSPACE_DIR"
     if [ -f "$LAST_DIR_FILE" ]; then activeDir=$(cat "$LAST_DIR_FILE"); fi
     # Normalize /storage/emulated/0 paths → /sdcard for consistent matching
@@ -917,21 +1011,26 @@ do_start_inner() {
         sMode="FULL SYSTEM"
     fi
 
-    local EXTRA_BINDS=""
-    [ -d "$WORKSPACE_DIR" ] && EXTRA_BINDS="$EXTRA_BINDS --bind $WORKSPACE_DIR:/workspace"
+    # Массив, а не строка: пути с пробелами иначе рвутся на word splitting
+    # (кавычки внутри строки бы не перепарсились — стало бы только хуже).
+    local -a EXTRA_BINDS=()
+    [ -d "$WORKSPACE_DIR" ] && EXTRA_BINDS+=(--bind "$WORKSPACE_DIR:/workspace")
     # Always mount phone storage unconditionally using the real Android path
     if [ -d "/storage/emulated/0" ]; then
-        EXTRA_BINDS="$EXTRA_BINDS --bind /storage/emulated/0:/phone --bind /storage/emulated/0:/sdcard"
+        EXTRA_BINDS+=(--bind "/storage/emulated/0:/phone" --bind "/storage/emulated/0:/sdcard")
     elif [ -d "/sdcard" ]; then
-        EXTRA_BINDS="$EXTRA_BINDS --bind /sdcard:/phone --bind /sdcard:/sdcard"
+        EXTRA_BINDS+=(--bind "/sdcard:/phone" --bind "/sdcard:/sdcard")
     fi
 
     if [ -f "$PREFIX/bin/check_and_patch.py" ]; then
         cp "$PREFIX/bin/check_and_patch.py" "$WORKSPACE_DIR/check_and_patch.py"
     fi
 
-    # Copy this manager script into workspace for Tmux to use as overlay
-    cp "$0" "$WORKSPACE_DIR/agy-manager.sh"
+    # Copy this manager script into workspace for Tmux to use as overlay.
+    # $0 бывает относительным (./agy-manager.sh) — резолвим, иначе cp при
+    # чужом CWD скопирует не тот файл (или упадёт).
+    local _self; _self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+    cp "$_self" "$WORKSPACE_DIR/agy-manager.sh"
     chmod +x "$WORKSPACE_DIR/agy-manager.sh"
 
     cat > "$WORKSPACE_DIR/start-agy.sh" << 'EOF'
@@ -972,11 +1071,21 @@ GATES = [
 UPDATER_URL = b"https://antigravity-cli-auto-updater-974169037036.us-central1.run.app"
 DISABLED_URL = b"http://127.0.0.1:9999/disabled-auto-updater-server-url-disabled-block"
 assert len(UPDATER_URL) == len(DISABLED_URL)
+# Паттерны УЖЕ пропатченных гейтов: отличаем «уже готов» от «гейт не найден».
+PATCHED = [
+    re.compile(rb"\x48\x85\xc0\x0f\x84....\x48\x85\xc0\x90\x0f\x85....", re.S),
+    re.compile(rb"...\xb5...\xb4\x21\x00\x80\x52...\x37", re.S),
+]
+def _write_marker():
+    ver = open(ver_lock).read().strip()
+    os.makedirs(os.path.dirname(marker), exist_ok=True)
+    open(marker, 'w').write(ver)
 try:
     with open(agy, 'rb') as f: data = bytearray(f.read())
+    raw = bytes(data)
     hits = 0
     for sig, fix, off in GATES:
-        for m in sig.finditer(bytes(data)):
+        for m in sig.finditer(raw):
             pos = m.start() + off
             if data[pos:pos+len(fix)] != fix:
                 data[pos:pos+len(fix)] = fix
@@ -989,22 +1098,28 @@ try:
     if hits:
         with open(agy, 'wb') as f: f.write(data)
         print(f'\033[32m[OK]\033[0m patch applied — eligibility screen off + updater blocked (V1.3.4)')
+        _write_marker()
+    elif any(p.search(raw) for p in PATCHED):
+        print('\033[34m[*]\033[0m agy already patched — marker refreshed.')
+        _write_marker()
     else:
-        print('\033[33m[~]\033[0m no unpatched gate found — may already be patched')
-    ver = open(ver_lock).read().strip()
-    os.makedirs(os.path.dirname(marker), exist_ok=True)
-    open(marker, 'w').write(ver)
+        # Гейт не найден и следов патча нет: маркер НЕ пишем, иначе бинарь без
+        # патча будет вечно считаться пропатченным. Повторим при след. запуске.
+        print('\033[31m[!]\033[0m no gate matched AND no patched trace — binary left untouched, will retry next start.')
 except Exception as e:
     print(f'\033[31m[!]\033[0m auto-patch error: {e}')
 AUTOPATCH
-        # Re-lock binary after patch
+        # Re-lock binary after patch (chmod работает; chattr +i без
+        # CAP_LINUX_IMMUTABLE молча no-op и в Termux, и под proot — не всерьёз).
         chmod 444 "$_agy_bin" 2>/dev/null || true
         chattr +i "$_agy_bin" 2>/dev/null || true
     fi
 fi
 # ─────────────────────────────────────────────────────────────────────────────
 
-cat > "$HOME/.tmux.conf" << 'TMUX_CONF'
+    # Пользовательский tmux.conf не затираем молча — один раз бэкапим.
+    [ -f "$HOME/.tmux.conf" ] && [ ! -f "$HOME/.tmux.conf.agybak" ] && cp "$HOME/.tmux.conf" "$HOME/.tmux.conf.agybak"
+    cat > "$HOME/.tmux.conf" << 'TMUX_CONF'
 set -g default-terminal "xterm-256color"
 set -ag terminal-overrides ",xterm-256color:Tc"
 set -g status off
@@ -1026,7 +1141,14 @@ if [ "$USE_PROXY" = "true" ] && { [ "$PROXY_TYPE" = "xray" ] || [ "$PROXY_TYPE" 
                 && rm -f /tmp/xray.zip
         fi
         if [ -f /workspace/xray_config.json ]; then
-            nohup /usr/local/bin/xray run -c /workspace/xray_config.json >/tmp/xray.log 2>&1 &
+            if [ -x /usr/local/bin/xray ]; then
+                nohup /usr/local/bin/xray run -c /workspace/xray_config.json >/tmp/xray.log 2>&1 &
+            else
+                # Раньше тут молча запускался несуществующий бинарь, а agy шёл
+                # напрямую без прокси. Теперь — громкое предупреждение.
+                echo -e "\e[31m[!] PROXY CORE MISSING: /usr/local/bin/xray not installed — agy will run WITHOUT proxy! Check network and restart session.\e[0m"
+                sleep 3
+            fi
         fi
     elif [ "$ENGINE" = "hysteria" ]; then
         if [ ! -f /usr/local/bin/hysteria ]; then
@@ -1036,7 +1158,12 @@ if [ "$USE_PROXY" = "true" ] && { [ "$PROXY_TYPE" = "xray" ] || [ "$PROXY_TYPE" 
                 && chmod +x /usr/local/bin/hysteria
         fi
         if [ -f /workspace/hysteria_config.json ]; then
-            nohup /usr/local/bin/hysteria -c /workspace/hysteria_config.json client >/tmp/hysteria.log 2>&1 &
+            if [ -x /usr/local/bin/hysteria ]; then
+                nohup /usr/local/bin/hysteria -c /workspace/hysteria_config.json client >/tmp/hysteria.log 2>&1 &
+            else
+                echo -e "\e[31m[!] PROXY CORE MISSING: /usr/local/bin/hysteria not installed — agy will run WITHOUT proxy! Check network and restart session.\e[0m"
+                sleep 3
+            fi
         fi
     fi
     export HTTP_PROXY="http://127.0.0.1:$(( ${XRAY_PORT:-10808} + 1 ))"
@@ -1113,15 +1240,14 @@ chmod +x "/workspace/run-agy.sh"
 
 if command -v tmux >/dev/null 2>&1; then
     tmux kill-session -t agy_session 2>/dev/null || true
-    exec tmux -u -f "$HOME/.tmux.conf" new-session -s agy_session "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; bash /workspace/run-agy.sh \"$@\""
+    exec tmux -u -f "$HOME/.tmux.conf" new-session -s agy_session "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; bash /workspace/run-agy.sh"
 else
     exec bash "/workspace/run-agy.sh" "$@"
 fi
 EOF
     chmod +x "$WORKSPACE_DIR/start-agy.sh"
 
-    # shellcheck disable=SC2086
-    proot-distro login debian $EXTRA_BINDS --no-kill-on-exit \
+    proot-distro login debian "${EXTRA_BINDS[@]}" --no-kill-on-exit \
         -- /bin/bash -c 'cp /workspace/start-agy.sh /usr/local/bin/start-agy.sh && chmod +x /usr/local/bin/start-agy.sh && exec /usr/local/bin/start-agy.sh'
 }
 
@@ -1181,7 +1307,7 @@ do_update() {
         echo -e "  \e[97m3.\e[0m Asia              \e[90m(Tsinghua, ghproxy)\e[0m"
         echo ""
         echo -n -e "  \e[38;5;51mSelect your region (1-3) [1]:\e[0m "
-        read -t 15 -r m_choice || m_choice="1"
+        drain_stdin; read -t 15 -r m_choice || m_choice="1"
         [ -z "$m_choice" ] && m_choice="1"
         mkdir -p "$WORKSPACE_DIR"
         echo "$m_choice" > "$WORKSPACE_DIR/.mirror_region"
@@ -1199,6 +1325,8 @@ export PATH="$HOME/.local/bin:$PATH"
 
 CURRENT_STEP=0
 TOTAL_STEPS=3
+# Ненулевой, если хоть один шаг обновления упал (set -e ниже глушим через ||).
+FAILED=0
 
 draw_ui() {
     local msg="$1"
@@ -1208,6 +1336,10 @@ draw_ui() {
     local w=24
     local filled=$(( w * p / 100 ))
     local empty=$(( w - filled ))
+    # Адаптация под узкие экраны: см. комментарий в draw_ui do_init.
+    local _cw=$(stty size 2>/dev/null | awk '{print $2}'); [ -z "$_cw" ] && _cw=80
+    local _maxsub=$((_cw - 32)); [ "$_maxsub" -lt 0 ] && _maxsub=0
+    sub="${sub:0:$_maxsub}"
     
     printf "\e[s"
     printf "\e[1;1H\e[2K\n\e[2K  \e[38;5;51m\e[1m[ UPDATING ANTIGRAVITY ]\e[0m\n\e[2K  \e[38;5;45m"
@@ -1225,6 +1357,7 @@ draw_ui() {
 
 spin_run() {
     local msg="$1"; shift
+    local rc=0
     CURRENT_STEP=$((CURRENT_STEP + 1))
     local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     printf '\e[?25l'
@@ -1239,8 +1372,7 @@ spin_run() {
         i=$((i+1))
         sleep 0.08
     done
-    wait "$pid" || rc=$?
-    rc=${rc:-0}
+    wait "$pid"; rc=$?
     draw_ui "$msg" "✓" ""
     if [ $rc -eq 0 ]; then
         printf '\r\e[2K  \e[38;5;46m[ ✓ ]\e[0m %s\n' "$msg"
@@ -1291,8 +1423,14 @@ download_engine() {
     done
     return 1
 }
-spin_run "Downloading Engine Update" download_engine
-spin_run "Extracting Engine Archives" tar -xzf /tmp/agy_cli.tar.gz -C /tmp/
+# Целостность архива до распаковки: раньше битый тарболл умирал только на tar.
+verify_engine() {
+    [ -s /tmp/agy_cli.tar.gz ] || return 1
+    tar tzf /tmp/agy_cli.tar.gz 2>/dev/null | grep -qE '(^|/)(antigravity|agy)$' || return 1
+}
+spin_run "Downloading Engine Update" download_engine || FAILED=1
+spin_run "Verifying Engine Archive" verify_engine || FAILED=1
+spin_run "Extracting Engine Archives" tar -xzf /tmp/agy_cli.tar.gz -C /tmp/ || FAILED=1
 
 _do_install() {
     if [ -f /tmp/antigravity ]; then
@@ -1302,14 +1440,21 @@ _do_install() {
     elif [ -f /tmp/agy_cli_linux_arm64/antigravity ]; then
         mv /tmp/agy_cli_linux_arm64/antigravity "$HOME/.local/bin/agy"
     else
-        find /tmp -name 'antigravity' -o -name 'agy' -type f 2>/dev/null | head -1 | xargs -I{} mv {} "$HOME/.local/bin/agy" || true
+        find /tmp \( -name 'antigravity' -o -name 'agy' \) -type f 2>/dev/null | head -1 | xargs -I{} mv {} "$HOME/.local/bin/agy" || true
     fi
     chmod +x "$HOME/.local/bin/agy" 2>/dev/null || true
     rm -rf /tmp/agy_cli.tar.gz /tmp/agy_cli_linux_arm64
 }
-spin_run "Deploying Executable" _do_install
+spin_run "Deploying Executable" _do_install || FAILED=1
 
-echo "$AGY_VERSION" > "$HOME/.local/share/agy/.version_lock"
+if [ "$FAILED" -eq 0 ]; then
+    echo "$AGY_VERSION" > "$HOME/.local/share/agy/.version_lock"
+else
+    # Не врём про успех и не пишем version_lock по битому состоянию;
+    # маркер увидит хостовая часть do_update (ниже) через /workspace.
+    echo -e "\n  \e[38;5;196m[FAIL] Engine update failed — version lock NOT written.\e[0m"
+    echo "FAILED" > /workspace/__agy_update_failed
+fi
 INSTALL_SCRIPT
 
     # Execute inside Debian (file-based, no bash -c variable hack)
@@ -1323,9 +1468,15 @@ INSTALL_SCRIPT
             -- /bin/bash /workspace/__agy_install.sh
     fi
     rm -f "$WORKSPACE_DIR/__agy_install.sh"
-    echo -e "\n  \e[38;5;46m[OK] Engine successfully updated to v1.1.26\e[0m"
-    echo -e "  \e[90mPress any key to continue...\e[0m"
-    read -rsn1
+    if [ -f "$WORKSPACE_DIR/__agy_update_failed" ]; then
+        rm -f "$WORKSPACE_DIR/__agy_update_failed"
+        echo -e "  \e[90mPress any key to continue...\e[0m"
+        drain_stdin; read -rsn1
+    else
+        echo -e "\n  \e[38;5;46m[OK] Engine successfully updated to v1.1.26\e[0m"
+        echo -e "  \e[90mPress any key to continue...\e[0m"
+        drain_stdin; read -rsn1
+    fi
 }
 
 run_patcher() {
@@ -1361,7 +1512,7 @@ run_patcher() {
             echo -e "\r\e[2K  \e[38;5;46m[ ✓ ] Patcher V1.3.4 ready\e[0m"
             python3 /workspace/$PATCHER_DIR/source/main.py
         else
-            if proot-distro login debian --test 2>/dev/null; then
+            if proot-distro login debian -- true 2>/dev/null; then
                 proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "cd /workspace/open-antigravity-patcher && git fetch --tags >/dev/null 2>&1; git checkout V1.3.4 >/dev/null 2>&1 || git checkout a4c6608 >/dev/null 2>&1 || true" 2>/dev/null || true
             fi
             echo -e "\r\e[2K  \e[38;5;46m[ ✓ ] Patcher V1.3.4 ready\e[0m"
@@ -1435,7 +1586,7 @@ do_configure_proxy() {
                     echo -e "\n ${G_RED}[!] Failed to parse URL.${C_RESET}"
                 fi
                 echo -e " ${G_GRAY}Press any key to continue...${C_RESET}"
-                read -rsn1
+                drain_stdin; read -rsn1
             fi
         fi
     done
@@ -1516,7 +1667,7 @@ do_directory_picker() {
         echo ""
         echo -e " ${G_GRAY}Change takes effect after session restart.${C_RESET}"
         echo -e " ${G_WHITE}Restart Antigravity session now? [y/N]${C_RESET} "
-        read -rsn1 ans
+        drain_stdin; read -rsn1 ans
         if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
             restart_session
         fi
@@ -1525,12 +1676,11 @@ do_directory_picker() {
 
 do_shell() {
     clear
-    local EXTRA_BINDS=""
-    [ -d "$WORKSPACE_DIR" ] && EXTRA_BINDS="$EXTRA_BINDS --bind $WORKSPACE_DIR:/workspace"
-    [ -d "/sdcard" ]        && EXTRA_BINDS="$EXTRA_BINDS --bind /storage/emulated/0:/phone --bind /storage/emulated/0:/sdcard"
+    local -a EXTRA_BINDS=()
+    [ -d "$WORKSPACE_DIR" ] && EXTRA_BINDS+=(--bind "$WORKSPACE_DIR:/workspace")
+    [ -d "/sdcard" ]        && EXTRA_BINDS+=(--bind "/storage/emulated/0:/phone" --bind "/storage/emulated/0:/sdcard")
     echo -e " ${G2}[*] Entering Debian shell...${C_RESET}"
-    # shellcheck disable=SC2086
-    proot-distro login debian $EXTRA_BINDS --no-kill-on-exit
+    proot-distro login debian "${EXTRA_BINDS[@]}" --no-kill-on-exit
 }
 
 do_reset() {
@@ -1539,7 +1689,7 @@ do_reset() {
     echo -e " ${G_RED}${C_BOLD}[!] WARNING [!]${C_RESET}"
     echo -e " ${G_WHITE}This will DELETE the Debian container and ALL settings!${C_RESET}"
     echo -e " ${G_WHITE}Type 'yes' to confirm:${C_RESET} "
-    read -r c
+    drain_stdin; read -r c
     if [ "$c" = "yes" ]; then
         proot-distro remove debian 2>/dev/null || true
         rm -rf "$WORKSPACE_DIR"
@@ -1556,15 +1706,9 @@ main_loop() {
     if ! bootloader_timer; then
         clear
         echo -e "${G2}[*] Auto-launching Antigravity CLI...${C_RESET}"
-        while true; do
-            rm -f "$WORKSPACE_DIR/.restart_requested"
-            do_start
-            if [ -f "$WORKSPACE_DIR/.restart_requested" ]; then
-                continue
-            else
-                break
-            fi
-        done
+        # do_start_inner заканчивается exec и не возвращается — цикл вокруг
+        # него (и флаг .restart_requested) недостижим. Прямой вызов.
+        do_start
         exit 0
     fi
 
@@ -1628,7 +1772,7 @@ main_loop() {
             clear
             echo -e "${G2}[*] Closing settings overlay. Returning to Antigravity...${C_RESET}"
             break
-        elif [ "$selection" -eq 255 ] || ([ "$selection" -eq 6 ] && [ "$IN_APP_MODE" = "false" ]); then
+        elif [ "$selection" -eq 6 ] && [ "$IN_APP_MODE" = "false" ]; then
             clear
             echo -e "${G2}[*] Exiting AgyCli Manager. Goodbye!${C_RESET}"
             exit 0
@@ -1645,15 +1789,7 @@ main_loop() {
         else
             case "$selection" in
                 0) 
-                    while true; do
-                        rm -f "$WORKSPACE_DIR/.restart_requested"
-                        do_start
-                        if [ -f "$WORKSPACE_DIR/.restart_requested" ]; then
-                            continue
-                        else
-                            break
-                        fi
-                    done
+                    do_start
                     ;;
                 1) do_directory_picker ;;
                 2) do_update ;;
