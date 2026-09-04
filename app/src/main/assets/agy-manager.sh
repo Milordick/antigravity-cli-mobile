@@ -832,7 +832,7 @@ M_CHOICE=\$(cat /workspace/.mirror_region 2>/dev/null | tr -d '\r\n' || echo 1)
 AGY_VERSION="1.1.26"
 AGY_VERSION=\$(echo "\$AGY_VERSION" | tr -d '\r\n')
 readonly AGY_VERSION
-# STRICT PIN: V1.3.2 3a4f30c — не менять без релиза (см. VERSIONS.lock)
+# STRICT PIN: V1.3.4 a4c6608 — не менять без релиза (см. VERSIONS.lock)
 
 if [ "\$M_CHOICE" = "1" ]; then
     sed -i -E 's|(deb|ftp)\.debian\.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
@@ -948,7 +948,7 @@ if ! command -v tmux >/dev/null 2>&1; then
     apt-get update >/dev/null 2>&1 && apt-get install -y tmux >/dev/null 2>&1
 fi
 
-# ── Auto-patch agy binary (V1.3.2 MultiGate: x64 + arm64) ─────────────────────
+# ── Auto-patch agy binary (V1.3.4 MultiGate: x64 + arm64) ─────────────────────
 _agy_bin="$HOME/.local/bin/agy"
 _ver_lock="$HOME/.local/share/agy/.version_lock"
 _pat_mark="$HOME/.local/share/agy/.patched_version"
@@ -956,14 +956,14 @@ if [ -f "$_agy_bin" ] && [ -f "$_ver_lock" ]; then
     _cur_ver=$(cat "$_ver_lock" 2>/dev/null)
     _pat_ver=$(cat "$_pat_mark" 2>/dev/null)
     if [ "$_cur_ver" != "$_pat_ver" ]; then
-        echo -e "\e[34m[*]\e[0m Auto-patching agy v${_cur_ver} (V1.3.2)..."
+        echo -e "\e[34m[*]\e[0m Auto-patching agy v${_cur_ver} (V1.3.4)..."
         # Temporarily unlock binary for patching
         chattr -i "$_agy_bin" 2>/dev/null || true
         chmod 755 "$_agy_bin" 2>/dev/null || true
         python3 - "$_agy_bin" "$_ver_lock" "$_pat_mark" << 'AUTOPATCH'
 import sys, re, os
 agy, ver_lock, marker = sys.argv[1], sys.argv[2], sys.argv[3]
-# V1.3.2 gates: CLI_GATE_X64 + CLI_GATE_ARM64 (unified linux+macos arm64)
+# V1.3.4 gates: CLI_GATE_X64 + CLI_GATE_ARM64 (unified linux+macos arm64)
 GATES = [
     (re.compile(rb"\x48\x85\xc0\x0f\x84....\x80\x78\x08\x00\x0f\x85....", re.S), b"\x48\x85\xc0\x90", 9),
     (re.compile(rb"...\xb5...\xb4\x01\x20\x40\x39...\x37", re.S), b"\x21\x00\x80\x52", 8),
@@ -988,7 +988,7 @@ try:
         print('  \033[32m✓\033[0m auto-updater URL neutralized')
     if hits:
         with open(agy, 'wb') as f: f.write(data)
-        print(f'\033[32m[OK]\033[0m patch applied — eligibility screen off + updater blocked (V1.3.2)')
+        print(f'\033[32m[OK]\033[0m patch applied — eligibility screen off + updater blocked (V1.3.4)')
     else:
         print('\033[33m[~]\033[0m no unpatched gate found — may already be patched')
     ver = open(ver_lock).read().strip()
@@ -1052,7 +1052,7 @@ fi
 cat > "$WORKSPACE_DIR/check_and_patch.py" << 'CHECK_PATCH'
 import sys, re, os, subprocess
 agy = os.path.expanduser("~/.local/bin/agy")
-# V1.3.2 MultiGate (x64 + arm64 unified)
+# V1.3.4 MultiGate (x64 + arm64 unified)
 GATES = [
     (re.compile(rb"\x48\x85\xc0\x0f\x84....\x80\x78\x08\x00\x0f\x85....", re.S), b"\x48\x85\xc0\x90", 9),
     (re.compile(rb"...\xb5...\xb4\x01\x20\x40\x39...\x37", re.S), b"\x21\x00\x80\x52", 8),
@@ -1072,11 +1072,11 @@ try:
             if data[pos:pos+len(fix)] != fix:
                 data[pos:pos+len(fix)] = fix
                 hits += 1
-                print(f'\033[34m[*]\033[0m Auto-patcher (V1.3.2): gate patched @ 0x{pos:08x}')
+                print(f'\033[34m[*]\033[0m Auto-patcher (V1.3.4): gate patched @ 0x{pos:08x}')
     if UPDATER_URL in bytes(data):
         data = bytearray(bytes(data).replace(UPDATER_URL, DISABLED_URL))
         hits += 1
-        print('\033[34m[*]\033[0m Auto-patcher (V1.3.2): auto-updater URL neutralized')
+        print('\033[34m[*]\033[0m Auto-patcher (V1.3.4): auto-updater URL neutralized')
     if hits:
         # Prevent "Text file busy" or "Permission denied"
         os.system("pkill -9 -x agy 2>/dev/null")
@@ -1085,7 +1085,7 @@ try:
         with open(f"{agy}.tmp", 'wb') as f: f.write(data)
         os.system(f"chmod 755 {agy}.tmp")
         os.system(f"mv -f {agy}.tmp {agy}")
-        print(f'\033[32m[OK]\033[0m patch applied — gates off + updater blocked (V1.3.2)')
+        print(f'\033[32m[OK]\033[0m patch applied — gates off + updater blocked (V1.3.4)')
 except Exception as e:
     print(f'\033[31m[!]\033[0m auto-patch error: {e}')
 CHECK_PATCH
@@ -1257,7 +1257,7 @@ M_CHOICE=$(cat /workspace/.mirror_region 2>/dev/null | tr -d '\r\n' || echo 1)
 AGY_VERSION="1.1.26"
 AGY_VERSION=$(echo "$AGY_VERSION" | tr -d '\r\n')
 readonly AGY_VERSION
-# STRICT PIN: V1.3.2 3a4f30c — см. VERSIONS.lock
+# STRICT PIN: V1.3.4 a4c6608 — см. VERSIONS.lock
 
 if [ "$M_CHOICE" = "1" ]; then
     MIRRORS=(
@@ -1338,33 +1338,33 @@ run_patcher() {
         PATCHER_DIR="open-antigravity-patcher"
     else
         rm -rf "$WORKSPACE_DIR/open-antigravity-patcher"
-        echo -e " ${G_GRAY}[*] Cloning Patcher V1.3.2 from GitHub...${C_RESET}"
+        echo -e " ${G_GRAY}[*] Cloning Patcher V1.3.4 from GitHub...${C_RESET}"
         if [ "$IN_APP_MODE" = "true" ]; then
-            git clone --branch V1.3.2 https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher 2>/dev/null || git clone https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher && git -C /workspace/open-antigravity-patcher checkout V1.3.2 2>/dev/null || true
+            git clone --branch V1.3.4 https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher 2>/dev/null || git clone https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher && git -C /workspace/open-antigravity-patcher checkout V1.3.4 2>/dev/null || true
         else
-            proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "git clone --branch V1.3.2 https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher 2>/dev/null || (git clone https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher && git -C /workspace/open-antigravity-patcher checkout V1.3.2 2>/dev/null || true)" 2>/dev/null || true
+            proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "git clone --branch V1.3.4 https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher 2>/dev/null || (git clone https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher && git -C /workspace/open-antigravity-patcher checkout V1.3.4 2>/dev/null || true)" 2>/dev/null || true
         fi
         PATCHER_DIR="open-antigravity-patcher"
     fi
     
     if [ -n "$PATCHER_DIR" ]; then
-        # V1.3.2 already contains unified MultiGate (x64+arm64); no hotfix needed.
-        # Ensure we are on V1.3.2 tag — checkout if cloned without tag.
+        # V1.3.4 already contains unified MultiGate (x64+arm64); no hotfix needed.
+        # Ensure we are on V1.3.4 tag — checkout if cloned without tag.
         if [ "$IN_APP_MODE" = "true" ]; then
-            # If repo has no V1.3.2 tag, try to checkout it
+            # If repo has no V1.3.4 tag, try to checkout it
             if [ -d "/workspace/open-antigravity-patcher/.git" ]; then
                 git -C /workspace/open-antigravity-patcher fetch --tags >/dev/null 2>&1 || true
-                git -C /workspace/open-antigravity-patcher checkout V1.3.2 >/dev/null 2>&1 || git -C /workspace/open-antigravity-patcher checkout 3a4f30c >/dev/null 2>&1 || true
+                git -C /workspace/open-antigravity-patcher checkout V1.3.4 >/dev/null 2>&1 || git -C /workspace/open-antigravity-patcher checkout a4c6608 >/dev/null 2>&1 || true
             fi
             export PATCHER_DIR="$PATCHER_DIR"
             export TERM=xterm-256color
-            echo -e "\r\e[2K  \e[38;5;46m[ ✓ ] Patcher V1.3.2 ready\e[0m"
+            echo -e "\r\e[2K  \e[38;5;46m[ ✓ ] Patcher V1.3.4 ready\e[0m"
             python3 /workspace/$PATCHER_DIR/source/main.py
         else
             if proot-distro login debian --test 2>/dev/null; then
-                proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "cd /workspace/open-antigravity-patcher && git fetch --tags >/dev/null 2>&1; git checkout V1.3.2 >/dev/null 2>&1 || git checkout 3a4f30c >/dev/null 2>&1 || true" 2>/dev/null || true
+                proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "cd /workspace/open-antigravity-patcher && git fetch --tags >/dev/null 2>&1; git checkout V1.3.4 >/dev/null 2>&1 || git checkout a4c6608 >/dev/null 2>&1 || true" 2>/dev/null || true
             fi
-            echo -e "\r\e[2K  \e[38;5;46m[ ✓ ] Patcher V1.3.2 ready\e[0m"
+            echo -e "\r\e[2K  \e[38;5;46m[ ✓ ] Patcher V1.3.4 ready\e[0m"
             proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "export TERM=xterm-256color; export PATCHER_DIR=$PATCHER_DIR; python3 /workspace/\$PATCHER_DIR/source/main.py"
         fi
         rm -f "$WORKSPACE_DIR/__apply_patcher.py"
