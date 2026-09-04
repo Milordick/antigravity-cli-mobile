@@ -624,6 +624,25 @@ invoke_filebrowser() {
 # Core System Functions
 # -----------------------------------------------------------------------------
 
+# ensure_debian_dns: чинит /etc/resolv.conf внутри контейнера. proot-distro
+# пишет туда 8.8.8.8, который у части провайдеров зарезан -> внутри Debian
+# падает ЛЮБОЙ резолв (curl (28), apt), хотя снаружи всё летает.
+# Логика: быстрый getent изнутри; не взлетел — перебор кандидатов записью
+# в resolv.conf. Здоровый путь стоит ~1 getent, больной чинится сам.
+ensure_debian_dns() {
+    local rootfs="$PREFIX/var/lib/proot-distro/installed-rootfs/debian"
+    [ -d "$rootfs" ] || return 0
+    if timeout 8 proot-distro login debian -- getent hosts github.com >/dev/null 2>&1; then
+        return 0
+    fi
+    local ns
+    for ns in 77.88.8.8 1.1.1.1 8.8.8.8 9.9.9.9; do
+        printf 'nameserver %s\n' "$ns" > "$rootfs/etc/resolv.conf" 2>/dev/null || return 1
+        timeout 8 proot-distro login debian -- getent hosts github.com >/dev/null 2>&1 && return 0
+    done
+    return 1
+}
+
 generate_xray_config() {
     [ -f "$PROXY_CONFIG" ] && source "$PROXY_CONFIG"
     XRAY_PORT="${XRAY_PORT:-10808}"
@@ -837,6 +856,7 @@ EOF
         fi
     }
     spin_run_host "Subsystem Image (Debian)" _install_debian
+    spin_run_host "Checking Debian DNS" ensure_debian_dns
 
     proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" --bind "/storage/emulated/0:/phone" --bind "/storage/emulated/0:/sdcard" -- /bin/bash << DEBIAN_SETUP
 set -e
@@ -940,7 +960,7 @@ mkdir -p "\$HOME/.local/bin" "\$HOME/.local/share/agy"
 
 download_engine() {
     for url in "\${MIRRORS[@]}"; do
-        if curl -# -fL --connect-timeout 5 --speed-limit 10000 --speed-time 15 --max-time 300 -o /tmp/agy_cli.tar.gz "\$url"; then
+        if curl -sS -fL --connect-timeout 5 --speed-limit 10000 --speed-time 15 --max-time 300 -o /tmp/agy_cli.tar.gz "\$url"; then
             return 0
         fi
     done
@@ -948,23 +968,32 @@ download_engine() {
 }
 # Целостность архива до распаковки: раньше битый тарболл умирал только на tar.
 verify_engine() {
+    # ВАЖНО: без pipefail выход пайпа = выход grep; tar может напечатать имя
+    # члена и всё равно упасть на EOF — вывод забираем, код tar проверяем.
     [ -s /tmp/agy_cli.tar.gz ] || return 1
-    tar tzf /tmp/agy_cli.tar.gz 2>/dev/null | grep -qE '(^|/)(antigravity|agy)$' || return 1
+    local _list
+    _list=$(tar tzf /tmp/agy_cli.tar.gz 2>/dev/null) || return 1
+    echo "$_list" | grep -qE '(^|/)(antigravity|agy)$' || return 1
 }
 spin_run "Downloading Antigravity Engine" download_engine
 spin_run "Verifying Engine Archive" verify_engine
+# Трупы прошлых попыток (частичный /tmp/antigravity) — снести, иначе их
+# подберёт _do_install вместо свежего файла.
+rm -rf /tmp/antigravity /tmp/agy /tmp/agy_cli_linux_arm64
 spin_run "Extracting Engine Archives" tar -xzf /tmp/agy_cli.tar.gz -C /tmp/
 
 _do_install() {
-    if [ -f /tmp/antigravity ]; then
-        mv /tmp/antigravity "\$HOME/.local/bin/agy"
-    elif [ -f /tmp/agy ]; then
-        mv /tmp/agy "\$HOME/.local/bin/agy"
-    elif [ -f /tmp/agy_cli_linux_arm64/antigravity ]; then
-        mv /tmp/agy_cli_linux_arm64/antigravity "\$HOME/.local/bin/agy"
-    else
-        find /tmp \( -name 'antigravity' -o -name 'agy' \) -type f 2>/dev/null | head -1 | xargs -I{} mv {} "\$HOME/.local/bin/agy" || true
-    fi
+    local _bin=""
+    for _c in /tmp/antigravity /tmp/agy /tmp/agy_cli_linux_arm64/antigravity; do
+        [ -f "\$_c" ] && _bin="\$_c" && break
+    done
+    [ -z "\$_bin" ] && _bin=\$(find /tmp \( -name 'antigravity' -o -name 'agy' \) -type f 2>/dev/null | head -1)
+    [ -n "\$_bin" ] || return 1
+    # Обрубки (частичная распаковка битого архива — в проде был 78КБ вместо
+    # ~200МБ) — в топку, а не в bin. Пол 20МБ с запасом на будущие версии.
+    local _sz; _sz=\$(stat -c %s "\$_bin" 2>/dev/null || echo 0)
+    [ "\$_sz" -ge 20000000 ] || return 1
+    mv "\$_bin" "\$HOME/.local/bin/agy" || return 1
     chmod +x "\$HOME/.local/bin/agy" 2>/dev/null || true
     rm -rf /tmp/agy_cli.tar.gz /tmp/agy_cli_linux_arm64
 }
@@ -982,6 +1011,12 @@ DEBIAN_SETUP
 
 do_start_inner() {
     [ -f "$PROXY_CONFIG" ] && source "$PROXY_CONFIG"
+
+    # DNS внутри контейнера чиним при каждом старте (дешёвый getent, если жив).
+    # Без этого падает всё сетевое: патчер-клон, xray-скачивание, agy-обновление.
+    if [ "$IN_APP_MODE" != "true" ]; then
+        ensure_debian_dns >/dev/null 2>&1 || echo -e " ${G_WARN}[!] Debian DNS repair failed — network features may not work.${C_RESET}"
+    fi
 
     # Если бинаря нет (удалён вручную после установки) — не уходим в вечный
     # цикл run-agy.sh с голым bash, а чиним через do_update и едем дальше.
@@ -1417,7 +1452,7 @@ mkdir -p "$HOME/.local/bin" "$HOME/.local/share/agy"
 
 download_engine() {
     for url in "${MIRRORS[@]}"; do
-        if curl -# -fL --connect-timeout 5 --speed-limit 10000 --speed-time 15 --max-time 300 -o /tmp/agy_cli.tar.gz "$url"; then
+        if curl -sS -fL --connect-timeout 5 --speed-limit 10000 --speed-time 15 --max-time 300 -o /tmp/agy_cli.tar.gz "$url"; then
             return 0
         fi
     done
@@ -1425,23 +1460,32 @@ download_engine() {
 }
 # Целостность архива до распаковки: раньше битый тарболл умирал только на tar.
 verify_engine() {
+    # ВАЖНО: без pipefail выход пайпа = выход grep; tar может напечатать имя
+    # члена и всё равно упасть на EOF — вывод забираем, код tar проверяем.
     [ -s /tmp/agy_cli.tar.gz ] || return 1
-    tar tzf /tmp/agy_cli.tar.gz 2>/dev/null | grep -qE '(^|/)(antigravity|agy)$' || return 1
+    local _list
+    _list=$(tar tzf /tmp/agy_cli.tar.gz 2>/dev/null) || return 1
+    echo "$_list" | grep -qE '(^|/)(antigravity|agy)$' || return 1
 }
 spin_run "Downloading Engine Update" download_engine || FAILED=1
 spin_run "Verifying Engine Archive" verify_engine || FAILED=1
+# Трупы прошлых попыток (частичный /tmp/antigravity) — снести, иначе их
+# подберёт _do_install вместо свежего файла.
+rm -rf /tmp/antigravity /tmp/agy /tmp/agy_cli_linux_arm64
 spin_run "Extracting Engine Archives" tar -xzf /tmp/agy_cli.tar.gz -C /tmp/ || FAILED=1
 
 _do_install() {
-    if [ -f /tmp/antigravity ]; then
-        mv /tmp/antigravity "$HOME/.local/bin/agy"
-    elif [ -f /tmp/agy ]; then
-        mv /tmp/agy "$HOME/.local/bin/agy"
-    elif [ -f /tmp/agy_cli_linux_arm64/antigravity ]; then
-        mv /tmp/agy_cli_linux_arm64/antigravity "$HOME/.local/bin/agy"
-    else
-        find /tmp \( -name 'antigravity' -o -name 'agy' \) -type f 2>/dev/null | head -1 | xargs -I{} mv {} "$HOME/.local/bin/agy" || true
-    fi
+    local _bin=""
+    for _c in /tmp/antigravity /tmp/agy /tmp/agy_cli_linux_arm64/antigravity; do
+        [ -f "$_c" ] && _bin="$_c" && break
+    done
+    [ -z "$_bin" ] && _bin=$(find /tmp \( -name 'antigravity' -o -name 'agy' \) -type f 2>/dev/null | head -1)
+    [ -n "$_bin" ] || return 1
+    # Обрубки (частичная распаковка битого архива — в проде был 78КБ вместо
+    # ~200МБ) — в топку, а не в bin. Пол 20МБ с запасом на будущие версии.
+    local _sz; _sz=$(stat -c %s "$_bin" 2>/dev/null || echo 0)
+    [ "$_sz" -ge 20000000 ] || return 1
+    mv "$_bin" "$HOME/.local/bin/agy" || return 1
     chmod +x "$HOME/.local/bin/agy" 2>/dev/null || true
     rm -rf /tmp/agy_cli.tar.gz /tmp/agy_cli_linux_arm64
 }
