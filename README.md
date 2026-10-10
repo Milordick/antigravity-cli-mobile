@@ -149,7 +149,6 @@ On startup: auto-launches in 3 seconds if initialized, or auto-starts full setup
 3. 🌐 Network & Proxy Settings
 4. 🩹 Run Antigravity Patcher
 5. 🐚 Open raw Debian shell
-6. 🗑️ Reset sandbox (full wipe)
 
 ---
 
@@ -238,12 +237,13 @@ If AGY shows a regional eligibility screen:
   Last dir  : /workspace/myproject
 
   1) Launch Antigravity CLI      ← Start AGY in Debian container
-  2) Update Antigravity CLI      ← Re-run official install script
-  3) Network & Proxy settings    ← Full proxy configuration submenu
-  4) Run Antigravity Patcher     ← Bypass regional eligibility check
-  5) Open Debian shell           ← Raw bash inside Debian container
-  6) Reset sandbox               ← ⚠️ Wipes EVERYTHING (Debian + workspace)
-  7) Exit
+  2) Select Workspace / Mode     ← Switch between internal and storage
+  3) Update Antigravity CLI      ← Re-run official install script
+  4) Network & Proxy settings    ← Full proxy configuration submenu
+  5) Run Antigravity Patcher     ← Bypass regional eligibility check
+  6) Update Lock [ ON / OFF ]    ← Prevent upstream binary auto-updates
+  7) Open Debian shell           ← Raw bash inside Debian container
+  0) Exit Manager
 ```
 
 ---
@@ -335,17 +335,11 @@ All persistent data lives in `/sdcard/AntigravityWorkspace/` on the Android side
 | `check_and_patch.py` | Auto-patcher script |
 | `open-antigravity-patcher/` | Patcher source (cloned on first use) |
 
-### ⚠️ Reset Sandbox
-**Menu → 6 → type `yes`** performs a complete wipe:
-- Deletes the entire Debian container (`proot-distro remove debian`)
-- Deletes the entire `/sdcard/AntigravityWorkspace/` folder
-- On next launch, the full first-run setup runs again from scratch
-
 ### 🔄 Updating AGY
-**Menu → 2** runs `curl -fsSL https://antigravity.google/cli/install.sh | bash` inside Debian. This updates the AGY binary to the latest version. After update, re-run the patcher if needed (Menu → 4).
+**Menu → 3** runs `curl -fsSL https://antigravity.google/cli/install.sh | bash` inside Debian. This updates the AGY binary to the latest version. After update, re-run the patcher if needed (Menu → 5).
 
 ### 🐚 Raw Debian Shell
-**Menu → 5** drops you into a plain `bash` shell inside the Debian container with `/workspace` and `/sdcard` mounted. Useful for manual debugging, installing packages, or advanced configuration.
+**Menu → 7** drops you into a plain `bash` shell inside the Debian container with `/workspace` and storage mounted. Useful for manual debugging, installing packages, or advanced configuration.
 
 ---
 
@@ -518,7 +512,7 @@ AGY CLI содержит региональные ограничения, бло
 
 ### 8. 🔄 Меню с автозапуском за 3 секунды
 
-При старте: авто-запуск через 3 секунды (или авто-установка при первом запуске). Любая клавиша открывает меню: запуск AGY, обновление, настройка прокси, запуск патчера, Debian shell, сброс sandbox.
+При старте: авто-запуск через 3 секунды (или авто-установка при первом запуске). Любая клавиша открывает меню: запуск AGY, выбор рабочей папки, обновление, настройка прокси, запуск патчера и Debian shell.
 
 ---
 
@@ -602,12 +596,13 @@ AGY CLI содержит региональные ограничения, бло
   Last dir  : /workspace/myproject
 
   1) Launch Antigravity CLI     ← Запустить AGY в контейнере Debian
-  2) Update Antigravity CLI     ← Переустановить официальный AGY CLI
-  3) Network & Proxy settings   ← Подменю настройки прокси
-  4) Run Antigravity Patcher    ← Обход региональной блокировки
-  5) Open Debian shell          ← Чистый bash внутри Debian
-  6) Reset sandbox              ← ⚠️ Полный сброс (Debian + workspace)
-  7) Exit
+  2) Выбор рабочей папки        ← Переключение между памятью и хранилищем
+  3) Update Antigravity CLI     ← Обновить официальный AGY CLI
+  4) Network & Proxy settings   ← Подменю настройки прокси
+  5) Run Antigravity Patcher    ← Меню патчера и гейтов MultiGate
+  6) Update Lock [ ON / OFF ]   ← Защита от автообновления бинарника
+  7) Open Debian shell          ← Чистый bash внутри Debian
+  0) Exit Manager
 ```
 
 ---
@@ -697,17 +692,11 @@ export ALL_PROXY="http://127.0.0.1:10809"
 | `check_and_patch.py` | Скрипт авто-патчера |
 | `open-antigravity-patcher/` | Исходники патчера (клонируются при первом использовании) |
 
-### ⚠️ Полный сброс
-**Меню → 6 → ввести `yes`** выполняет полный сброс:
-- Удаляет весь Debian-контейнер (`proot-distro remove debian`)
-- Удаляет весь `/sdcard/AntigravityWorkspace/`
-- При следующем запуске снова выполняется полная первоначальная установка
-
 ### 🔄 Обновление AGY
-**Меню → 2** запускает `curl -fsSL https://antigravity.google/cli/install.sh | bash` внутри Debian. Обновляет AGY до последней версии. После обновления при необходимости повторно запусти патчер (Меню → 4).
+**Меню → 3** запускает `curl -fsSL https://antigravity.google/cli/install.sh | bash` внутри Debian. Обновляет AGY до последней версии. После обновления при необходимости повторно запусти патчер (Меню → 5).
 
 ### 🐚 Чистый Debian Shell
-**Меню → 5** открывает обычный `bash` внутри Debian с примонтированными `/workspace` и `/sdcard`. Полезно для ручной отладки, установки пакетов и расширенной настройки.
+**Меню → 7** открывает обычный `bash` внутри Debian с примонтированными `/workspace` и хранилищем. Полезно для ручной отладки, установки пакетов и расширенной настройки.
 
 ---
 
