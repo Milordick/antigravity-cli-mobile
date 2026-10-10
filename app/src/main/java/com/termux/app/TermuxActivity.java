@@ -1076,6 +1076,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 Logger.logDebug(LOG_TAG, "Successfully force-updated script: " + script);
             }
 
+            // Ship the Antigravity patcher OFFLINE as a bundled asset (like the Debian rootfs).
+            // Plain .tar (NOT .gz): aapt gunzips .gz assets and strips the extension.
+            // Write to $HOME ALWAYS (app-internal, no storage permission needed) so the
+            // manager can seed it into the workspace even on first run before storage is
+            // granted; also mirror into the /sdcard workspace when it's already writable.
+            final String PATCHER_BUNDLE = "open-antigravity-patcher-v1.3.8.tar";
+            try {
+                byte[] bundleBytes;
+                try (java.io.InputStream in = getAssets().open(PATCHER_BUNDLE)) {
+                    java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                    byte[] buf = new byte[65536];
+                    int len;
+                    while ((len = in.read(buf)) != -1) bos.write(buf, 0, len);
+                    bundleBytes = bos.toByteArray();
+                }
+                java.io.File homeBundle = new java.io.File(homeDir, PATCHER_BUNDLE);
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(homeBundle)) {
+                    out.write(bundleBytes);
+                }
+                if (sdcardDir.exists() && sdcardDir.canWrite()) {
+                    try (java.io.FileOutputStream out = new java.io.FileOutputStream(new java.io.File(sdcardDir, PATCHER_BUNDLE))) {
+                        out.write(bundleBytes);
+                    }
+                }
+                Logger.logDebug(LOG_TAG, "Deployed bundled patcher (" + bundleBytes.length + " bytes)");
+            } catch (Exception be) {
+                Logger.logError(LOG_TAG, "Failed to deploy bundled patcher: " + be.getMessage());
+            }
+
             // Write version marker to home as well
             java.io.File versionFile = new java.io.File(homeDir, "agy_version.txt");
             try (java.io.FileWriter vw = new java.io.FileWriter(versionFile, false)) {
@@ -1093,12 +1122,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 "if [ ! -r \"/sdcard/AntigravityWorkspace\" ]; then\n" +
                 "    echo \"\"\n" +
                 "    echo \"=== Antigravity CLI ===\"\n" +
-                "    echo \"Пожалуйста, разрешите доступ к памяти во всплывающем окне.\"\n" +
-                "    echo \"После этого нажмите ENTER для запуска...\"\n" +
+                "    echo \"Please allow storage access in the popup dialog.\"\n" +
+                "    echo \"Then press ENTER to continue...\"\n" +
                 "    read -r\n" +
                 "fi\n\n" +
                 "if [ -f \"$HOME/agy-manager.sh\" ]; then\n" +
-                "    echo -e \"\\e[1;32m[*] Запуск Antigravity CLI (Версия: $AGY_APP_VERSION)...\\e[0m\"\n" +
+                "    echo -e \"\\e[1;32m[*] Starting Antigravity CLI (Version: $AGY_APP_VERSION)...\\e[0m\"\n" +
                 "    exec \"$HOME/agy-manager.sh\"\n" +
                 "fi\n";
 
@@ -1116,4 +1145,3 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 }
-

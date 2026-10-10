@@ -38,3 +38,7 @@ local.properties
 .swp
 ehthumbs.db
 Thumbs.db
+
+# Python bytecode (local script testing artifacts)
+__pycache__/
+*.pyc

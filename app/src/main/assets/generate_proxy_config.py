@@ -143,9 +143,20 @@ def parse_hysteria2(url, socks_port):
         
         if obfs_type:
             config["obfs"] = {
-                "type": obfs_type,
-                "password": obfs_password
+                "type": obfs_type
             }
+            if obfs_type == "salamander":
+                config["obfs"]["salamander"] = {
+                    "password": obfs_password
+                }
+            elif obfs_type == "gecko":
+                config["obfs"]["gecko"] = {
+                    "password": obfs_password
+                }
+            else:
+                config["obfs"][obfs_type] = {
+                    "password": obfs_password
+                }
             
         return config
     except Exception as e:

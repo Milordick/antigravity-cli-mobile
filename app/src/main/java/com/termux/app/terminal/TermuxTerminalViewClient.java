@@ -15,7 +15,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ListView;
-import android.widget.Toast;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
@@ -183,25 +182,122 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
 
     @Override
-    public void onSingleTapUp(MotionEvent e) {
+    public boolean onUrlTap(MotionEvent e) {
         TerminalEmulator term = mActivity.getCurrentSession().getEmulator();
+        if (term == null) return false;
+        // Do not swallow taps while the app under the cursor consumes mouse events itself
+        if (term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) return false;
 
-        if (mActivity.getProperties().shouldOpenTerminalTranscriptURLOnClick()) {
+        try {
             int[] columnAndRow = mActivity.getTerminalView().getColumnAndRow(e, true);
-            String wordAtTap = term.getScreen().getWordAtLocation(columnAndRow[0], columnAndRow[1]);
+            int column = columnAndRow[0];
+            int externalRow = columnAndRow[1];
+            // getWordAtLocation expects an internal buffer row; guard against out-of-range taps
+            if (externalRow < -term.getScreen().getActiveTranscriptRows() || externalRow >= term.mRows)
+                return false;
+            int internalRow = term.getScreen().externalToInternalRow(externalRow);
+
+            String wordAtTap = term.getScreen().getWordAtLocation(column, internalRow);
+            if (wordAtTap == null || wordAtTap.trim().length() == 0) return false;
+
             LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(wordAtTap);
+            String foundUrl = null;
 
             if (!urlSet.isEmpty()) {
-                String url = (String) urlSet.iterator().next();
-                ShareUtils.openUrl(mActivity, url);
-                return;
+                foundUrl = (String) urlSet.iterator().next();
             }
-        }
 
-        if (!term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
-            if (!KeyboardUtils.areDisableSoftKeyboardFlagsSet(mActivity))
+            // Giga-link fallback: CLI frameworks often hard-wrap URLs with borders/padding.
+            // Run this unconditionally because foundUrl might only contain the truncated first line!
+            // getSelectedText works on external rows clamped to [-activeTranscriptRows, screenRows-1].
+            int startRow = Math.max(externalRow - 40, -term.getScreen().getActiveTranscriptRows());
+            int endRow = Math.min(externalRow + 40, term.mRows - 1);
+
+            ArrayList<String> fragments = new ArrayList<>();
+            int tapIndex = -1;
+
+            for (int r = startRow; r <= endRow; r++) {
+                String line = term.getScreen().getSelectedText(0, r, term.mColumns, r, false, false);
+                if (line == null) line = "";
+                
+                // Clean line of padding and common CLI border characters
+                String clean = line.trim();
+                clean = clean.replaceAll("^[│║|]+", "").replaceAll("[│║|]+$", "");
+                clean = clean.trim();
+                
+                fragments.add(clean);
+                if (r == externalRow) {
+                    tapIndex = fragments.size() - 1;
+                }
+            }
+            
+            if (tapIndex != -1 && fragments.get(tapIndex).length() > 0) {
+                int first = tapIndex;
+                int last = tapIndex;
+                
+                // Walk up: continue as long as the previous line has NO spaces (meaning it's purely a broken URL part)
+                while (first > 0 && fragments.get(first - 1).length() > 0 && !fragments.get(first - 1).contains(" ")) {
+                    first--;
+                }
+                // Walk down: continue as long as the NEXT line has NO spaces
+                while (last < fragments.size() - 1 && fragments.get(last + 1).length() > 0 && !fragments.get(last + 1).contains(" ")) {
+                    last++;
+                }
+                // Also check if the line AFTER last has spaces but starts with the rest of the URL?
+                // For safety, we just append first to last. If `first` has spaces, take its last word.
+                // If `last` (if it was the tapped line and had spaces) has spaces, take its first word.
+                
+                StringBuilder gigaUrl = new StringBuilder();
+                for (int i = first; i <= last; i++) {
+                    String part = fragments.get(i);
+                    if (i == first && part.contains(" ")) {
+                        String[] words = part.split("\\s+");
+                        part = words[words.length - 1]; // take the last word
+                    } else if (i == last && part.contains(" ") && first != last) {
+                        String[] words = part.split("\\s+");
+                        part = words[0]; // take the first word
+                    } else if (first == last && part.contains(" ")) {
+                        // Tapped on a single line with spaces, just use wordAtTap
+                        part = wordAtTap;
+                    }
+                    gigaUrl.append(part);
+                }
+                
+                LinkedHashSet<CharSequence> gigaSet = TermuxUrlUtils.extractUrls(gigaUrl.toString());
+                if (!gigaSet.isEmpty()) {
+                    String extractedGiga = (String) gigaSet.iterator().next();
+                    // Override if giga link is longer (meaning it successfully concatenated multiple lines)
+                    if (foundUrl == null || extractedGiga.length() > foundUrl.length()) {
+                        foundUrl = extractedGiga;
+                    }
+                }
+            }
+
+            if (foundUrl != null) {
+                final String url = foundUrl;
+                new AlertDialog.Builder(mActivity)
+                    .setTitle("Open Link?")
+                    .setMessage(url)
+                    .setPositiveButton("Open", (dialog, which) -> ShareUtils.openUrl(mActivity, url))
+                    .setNegativeButton("Cancel", null)
+                    .show();
+                return true;
+            }
+        } catch (Exception ex) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to parse URL on tap", ex);
+        }
+        return false;
+    }
+
+    @Override
+    public void onSingleTapUp(MotionEvent e) {
+        TerminalEmulator term = mActivity.getCurrentSession().getEmulator();
+        if (term == null) return;
+        if (!e.isFromSource(InputDevice.SOURCE_MOUSE)) {
+            if (!KeyboardUtils.areDisableSoftKeyboardFlagsSet(mActivity)) {
+                mActivity.getTerminalView().requestFocus();
                 KeyboardUtils.showSoftKeyboard(mActivity, mActivity.getTerminalView());
-            else
+            } else
                 Logger.logVerbose(LOG_TAG, "Not showing soft keyboard onSingleTapUp since its disabled");
         }
     }

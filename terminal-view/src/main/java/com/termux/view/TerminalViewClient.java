@@ -21,7 +21,13 @@ public interface TerminalViewClient {
      */
     float onScale(float scale);
 
-
+    /**
+     * Called on a single tap to check if a URL should be opened.
+     * Returns true if a URL was handled.
+     */
+    default boolean onUrlTap(MotionEvent e) {
+        return false;
+    }
 
     /**
      * On a single tap on the terminal if terminal mouse reporting not enabled.

@@ -44,6 +44,9 @@ PROXY_TYPE="xray"
 PROXY_ADDR="127.0.0.1"
 PROXY_PORT="10808"
 XRAY_PORT="10808"
+# Лок обновлений Antigravity: true (по умолч.) — глушим auto-updater и лочим
+# бинарь, патч/регион-байпас держится. false — agy волен самообновляться.
+UPDATE_LOCK="true"
 StorageMode="FULL SYSTEM"
 LastDirWork="$WORKSPACE_DIR"
 LastDirFull="/storage/emulated/0"
@@ -64,13 +67,13 @@ fi
 drain_stdin() { [ -t 0 ] || return 0; local _d; while read -t 0 -rsn1 _d 2>/dev/null; do :; done; }
 
 # cell_width: видимая ширина строки в клетках терминала.
-# ${#var} считает символы: эмодзи W-класса (📂📁🌐🔄🛠🗙🗄📦 — 1 символ, 2 клетки)
+# ${#var} считает символы: эмодзи W-класса (📂📁🌐🔄🛠🗙🗄📦🔒 — 1 символ, 2 клетки)
 # дают +1, а U+FE0F (VS16, напр. в 🛠️) — 0 клеток при 1 символе, даёт −1.
 # Остальное (─ │ █ ▒ ● ○ ▶ ◀ • ✓ ✗ ✔ ↵ ↩) — 1 символ = 1 клетка, поправок нет.
 cell_width() {
     local s; s=$(strip_ansi "$1")
     local w=${#s} tmp c e
-    for e in "📂" "📁" "🌐" "🔄" "🛠" "🗙" "🗄" "📦"; do
+    for e in "📂" "📁" "🌐" "🔄" "🛠" "🗙" "🗄" "📦" "🔒"; do
         tmp=${s//"$e"/}; c=$(( (${#s} - ${#tmp}) / ${#e} ))
         w=$((w + c))
     done
@@ -423,8 +426,9 @@ bootloader_timer() {
         local tsPad=$((1 + (innerWidth + 2 - ${#tsRaw}) / 2))
         [ "$tsPad" -lt 1 ] && tsPad=1
         
-        # \r + 2K — строго одна строка, без переноса
-        printf '\r\033[2K%s%s' "$(print_spaces $tsPad)" "$timerStr"
+        # \r + 2K — строго одна строка, без переноса. %b (не %s): timerStr
+        # содержит литеральные \e[...]-последовательности, их надо интерпретировать.
+        printf '\r\033[2K%s%b' "$(print_spaces $tsPad)" "$timerStr"
         
         if read -t 0.1 -rsn1 key; then
             printf '\033[?25h\n'
@@ -558,6 +562,21 @@ invoke_menu() {
             fi
         elif [[ $key == "" ]]; then
             printf '\e[?1049l'; printf '\e[?25h'; return $selectedIndex
+        elif [[ "$key" =~ ^[0-9]$ ]]; then
+            for ((idx=0; idx<optCount; idx++)); do
+                local cleanText; cleanText=$(strip_ansi "${options[$idx]}")
+                if [[ "$cleanText" == "$key."* || "$cleanText" == "$key "* ]]; then
+                    printf '\e[?1049l'; printf '\e[?25h'; return "$idx"
+                fi
+            done
+        elif [[ "$key" == "y" || "$key" == "Y" ]]; then
+            if [[ "$title" == *"RESTART"* ]]; then
+                printf '\e[?1049l'; printf '\e[?25h'; return 0
+            fi
+        elif [[ "$key" == "n" || "$key" == "N" ]]; then
+            if [[ "$title" == *"RESTART"* ]]; then
+                printf '\e[?1049l'; printf '\e[?25h'; return 1
+            fi
         fi
     done
 }
@@ -632,25 +651,23 @@ invoke_filebrowser() {
 ensure_debian_dns() {
     local rootfs="$PREFIX/var/lib/proot-distro/installed-rootfs/debian"
     [ -d "$rootfs" ] || return 0
-    if timeout 8 proot-distro login debian -- getent hosts github.com >/dev/null 2>&1; then
+    # Быстрая проверка: если resolv.conf уже содержит надежные DNS — не тратим время на сетевой getent при каждом старте
+    if grep -q "77.88.8.8" "$rootfs/etc/resolv.conf" 2>/dev/null; then
         return 0
     fi
-    local ns
-    for ns in 77.88.8.8 1.1.1.1 8.8.8.8 9.9.9.9; do
-        printf 'nameserver %s\n' "$ns" > "$rootfs/etc/resolv.conf" 2>/dev/null || return 1
-        timeout 8 proot-distro login debian -- getent hosts github.com >/dev/null 2>&1 && return 0
-    done
-    return 1
+    printf 'nameserver 77.88.8.8\nnameserver 1.1.1.1\nnameserver 8.8.8.8\n' > "$rootfs/etc/resolv.conf" 2>/dev/null || return 1
+    return 0
 }
 
 generate_xray_config() {
     [ -f "$PROXY_CONFIG" ] && source "$PROXY_CONFIG"
     XRAY_PORT="${XRAY_PORT:-10808}"
     
+    local res=1
     if [ "$IN_APP_MODE" = "true" ]; then
         if [ -f "$WORKSPACE_DIR/vless_link.txt" ]; then
             python3 /workspace/generate_proxy_config.py /workspace/vless_link.txt "$XRAY_PORT" /workspace >/dev/null 2>&1
-            return $?
+            res=$?
         fi
     else
         local update_gen="false"
@@ -662,45 +679,127 @@ generate_xray_config() {
         
         if [ -f "$WORKSPACE_DIR/vless_link.txt" ]; then
             proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" --bind "/storage/emulated/0:/phone" --bind "/storage/emulated/0:/sdcard" -- /usr/bin/python3 /workspace/generate_proxy_config.py /workspace/vless_link.txt "$XRAY_PORT" /workspace >/dev/null 2>&1
-            return $?
+            res=$?
         fi
     fi
-    return 1
+    if [ -f "$WORKSPACE_DIR/proxy_engine.txt" ]; then
+        local eng; eng=$(cat "$WORKSPACE_DIR/proxy_engine.txt" 2>/dev/null)
+        if [ "$eng" = "hysteria" ]; then PROXY_TYPE="hysteria2"; elif [ "$eng" = "xray" ]; then PROXY_TYPE="xray"; fi
+        sed -i "s/PROXY_TYPE=.*/PROXY_TYPE=\"$PROXY_TYPE\"/" "$PROXY_CONFIG" 2>/dev/null || true
+    fi
+    return $res
 }
 
 restart_proxy_core() {
+    [ -f "$PROXY_CONFIG" ] && source "$PROXY_CONFIG"
     pkill -x xray >/dev/null 2>&1 || true
     pkill -x hysteria >/dev/null 2>&1 || true
     if [ "$USE_PROXY" = "true" ]; then
-        if [ "$PROXY_TYPE" = "xray" ] && [ -f /workspace/xray_config.json ]; then
-            if [ -x /usr/local/bin/xray ]; then
-                nohup /usr/local/bin/xray run -c /workspace/xray_config.json >/tmp/xray.log 2>&1 &
-            else
-                echo -e " ${G_RED}[!] xray core missing — proxy NOT started, traffic would go direct.${C_RESET}"
+        local engine="xray"
+        [ -f /workspace/proxy_engine.txt ] && engine=$(cat /workspace/proxy_engine.txt 2>/dev/null)
+        [ "$PROXY_TYPE" = "hysteria2" ] && engine="hysteria"
+        [ "$PROXY_TYPE" = "xray" ] && engine="xray"
+
+        if [ "$engine" = "xray" ]; then
+            if [ ! -x /usr/local/bin/xray ]; then
+                if [ -f /workspace/xray ]; then
+                    cp /workspace/xray /usr/local/bin/xray && chmod +x /usr/local/bin/xray
+                else
+                    echo -e " ${G2}[*] Downloading Xray core...${C_RESET}"
+                    local arch; arch=$(uname -m)
+                    local xarch="64"
+                    case "$arch" in aarch64) xarch="arm64-v8a" ;; x86_64) xarch="64" ;; armv7l) xarch="arm32-v7a" ;; esac
+                    curl -# -L -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${xarch}.zip" \
+                        && unzip -q -o /tmp/xray.zip -d /usr/local/bin/ xray \
+                        && chmod +x /usr/local/bin/xray \
+                        && rm -f /tmp/xray.zip
+                fi
             fi
-        elif [ "$PROXY_TYPE" = "hysteria2" ] && [ -f /workspace/hysteria_config.json ]; then
-            if [ -x /usr/local/bin/hysteria ]; then
-                nohup /usr/local/bin/hysteria -c /workspace/hysteria_config.json client >/tmp/hysteria.log 2>&1 &
+            if [ -f /workspace/xray_config.json ]; then
+                if [ -x /usr/local/bin/xray ]; then
+                    nohup /usr/local/bin/xray run -c /workspace/xray_config.json >/tmp/xray.log 2>&1 &
+                    sleep 1
+                    if pgrep -x xray >/dev/null 2>&1; then
+                        echo -e " ${G_GREEN}[OK] Xray active (socks ${XRAY_PORT:-10808}, http $(( ${XRAY_PORT:-10808} + 1 )))${C_RESET}"
+                    else
+                        echo -e " ${G_RED}[!] Xray failed to start. /tmp/xray.log:${C_RESET}"
+                        tail -n 4 /tmp/xray.log 2>/dev/null
+                    fi
+                else
+                    echo -e " ${G_RED}[!] /usr/local/bin/xray download failed.${C_RESET}"
+                fi
             else
-                echo -e " ${G_RED}[!] hysteria core missing — proxy NOT started, traffic would go direct.${C_RESET}"
+                echo -e " ${G_WARN}[!] /workspace/xray_config.json not found.${C_RESET}"
+            fi
+        elif [ "$engine" = "hysteria" ]; then
+            if [ ! -x /usr/local/bin/hysteria ]; then
+                if [ -f /workspace/hysteria ]; then
+                    cp /workspace/hysteria /usr/local/bin/hysteria && chmod +x /usr/local/bin/hysteria
+                else
+                    echo -e " ${G2}[*] Downloading Hysteria core...${C_RESET}"
+                    local arch; arch=$(uname -m)
+                    local hyarch="amd64"
+                    case "$arch" in aarch64) hyarch="arm64" ;; x86_64) hyarch="amd64" ;; armv7l) hyarch="arm" ;; esac
+                    curl -# -L -o /usr/local/bin/hysteria "https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-${hyarch}" \
+                        && chmod +x /usr/local/bin/hysteria
+                fi
+            fi
+            if [ -f /workspace/hysteria_config.json ]; then
+                if [ -x /usr/local/bin/hysteria ]; then
+                    nohup /usr/local/bin/hysteria -c /workspace/hysteria_config.json client >/tmp/hysteria.log 2>&1 &
+                    sleep 1
+                    if pgrep -x hysteria >/dev/null 2>&1; then
+                        echo -e " ${G_GREEN}[OK] Hysteria2 active (socks ${XRAY_PORT:-10808}, http $(( ${XRAY_PORT:-10808} + 1 )))${C_RESET}"
+                    else
+                        echo -e " ${G_RED}[!] Hysteria failed to start. /tmp/hysteria.log:${C_RESET}"
+                        tail -n 4 /tmp/hysteria.log 2>/dev/null
+                    fi
+                else
+                    echo -e " ${G_RED}[!] /usr/local/bin/hysteria download failed.${C_RESET}"
+                fi
+            else
+                echo -e " ${G_WARN}[!] /workspace/hysteria_config.json not found.${C_RESET}"
             fi
         fi
+    else
+        echo -e " ${G_WHITE}[*] Proxy turned OFF.${C_RESET}"
     fi
 }
 
 restart_session() {
     clear
     show_header
-    echo -e " ${G2}[*] Closing Antigravity session...${C_RESET}"
-    echo -e " ${G_GRAY}Settings are saved. Reopen the app to start a new session.${C_RESET}"
-    sleep 1
-    # NOTE: do_start_inner заканчивается exec (tmux/bash) и никогда не
-    # возвращается, поэтому никакой внутрискриптовый цикл не может прочитать
-    # флаг рестарта — перезапуск делает только сторона приложения. Здесь —
-    # честная остановка, а не обещание рестарта, которого не будет.
-    tmux kill-session -t agy_session 2>/dev/null || true
-    pkill -9 -x agy 2>/dev/null || true
-    exit 0
+    if [ "$IN_APP_MODE" = "true" ]; then
+        echo -e " ${G2}[*] Restarting Antigravity session...${C_RESET}"
+        
+        # Determine target directory in Debian container
+        local targetDir="/workspace"
+        if [ -f "$WORKSPACE_DIR/.last_dir" ]; then
+            local savedDir; savedDir=$(cat "$WORKSPACE_DIR/.last_dir" 2>/dev/null | tr -d '\r\n')
+            savedDir="${savedDir//\/storage\/emulated\/0\//\/sdcard\/}"
+            if [[ "$savedDir" == "$WORKSPACE_DIR"* ]]; then
+                targetDir="/workspace${savedDir#$WORKSPACE_DIR}"
+            elif [[ "$savedDir" == "/sdcard"* ]]; then
+                targetDir="/phone${savedDir#/sdcard}"
+                [ ! -d "$targetDir" ] && targetDir="/sdcard${savedDir#/sdcard}"
+            elif [ -d "$savedDir" ]; then
+                targetDir="$savedDir"
+            fi
+        fi
+        [ ! -d "$targetDir" ] && targetDir="/workspace"
+
+        # Kill running agy and respawn window 0 in the new working directory
+        pkill -9 -x agy 2>/dev/null || true
+        tmux respawn-pane -k -c "$targetDir" -t agy_session:0 "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; bash /workspace/run-agy.sh" 2>/dev/null || true
+        sleep 0.5
+        tmux select-window -t agy_session:0 2>/dev/null || true
+        exit 0
+    else
+        echo -e " ${G2}[*] Closing Antigravity session...${C_RESET}"
+        tmux kill-session -t agy_session 2>/dev/null || true
+        pkill -9 -x agy 2>/dev/null || true
+        exit 0
+    fi
 }
 
 is_initialized() {
@@ -757,6 +856,7 @@ PROXY_TYPE="xray"
 PROXY_ADDR="127.0.0.1"
 PROXY_PORT="10808"
 XRAY_PORT="10808"
+UPDATE_LOCK="true"
 EOF
         chmod +x "$PROXY_CONFIG"
     fi
@@ -925,7 +1025,7 @@ M_CHOICE=\$(cat /workspace/.mirror_region 2>/dev/null | tr -d '\r\n' || echo 1)
 AGY_VERSION="1.1.26"
 AGY_VERSION=\$(echo "\$AGY_VERSION" | tr -d '\r\n')
 readonly AGY_VERSION
-# STRICT PIN: V1.3.4 a4c6608 — не менять без релиза (см. VERSIONS.lock)
+# STRICT PIN: V1.3.8 fe12d5b — не менять без релиза (см. VERSIONS.lock)
 
 if [ "\$M_CHOICE" = "1" ]; then
     sed -i -E 's|(deb|ftp)\.debian\.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
@@ -975,13 +1075,6 @@ verify_engine() {
     _list=$(tar tzf /tmp/agy_cli.tar.gz 2>/dev/null) || return 1
     echo "$_list" | grep -qE '(^|/)(antigravity|agy)$' || return 1
 }
-spin_run "Downloading Antigravity Engine" download_engine
-spin_run "Verifying Engine Archive" verify_engine
-# Трупы прошлых попыток (частичный /tmp/antigravity) — снести, иначе их
-# подберёт _do_install вместо свежего файла.
-rm -rf /tmp/antigravity /tmp/agy /tmp/agy_cli_linux_arm64
-spin_run "Extracting Engine Archives" tar -xzf /tmp/agy_cli.tar.gz -C /tmp/
-
 _do_install() {
     local _bin=""
     for _c in /tmp/antigravity /tmp/agy /tmp/agy_cli_linux_arm64/antigravity; do
@@ -997,11 +1090,32 @@ _do_install() {
     chmod +x "\$HOME/.local/bin/agy" 2>/dev/null || true
     rm -rf /tmp/agy_cli.tar.gz /tmp/agy_cli_linux_arm64
 }
-spin_run "Deploying Executable" _do_install
+# Официальный установщик (SHA512, всегда latest). install.sh выходит рано, если
+# agy уже есть — поэтому сносим перед запуском, чтобы поставить свежак.
+install_official() {
+    rm -f "\$HOME/.local/bin/agy"
+    curl -fsSL https://antigravity.google/cli/install.sh | bash || return 1
+    [ -x "\$HOME/.local/bin/agy" ] || return 1
+    local _sz; _sz=\$(stat -c %s "\$HOME/.local/bin/agy" 2>/dev/null || echo 0)
+    [ "\$_sz" -ge 20000000 ] || return 1
+}
+# Официальный путь; при провале (регион/блокировка run.app) — откат на зеркала.
+engine_install() {
+    if install_official; then return 0; fi
+    echo "[*] Official installer unavailable — falling back to GitHub mirrors..."
+    download_engine || return 1
+    verify_engine || return 1
+    rm -rf /tmp/antigravity /tmp/agy /tmp/agy_cli_linux_arm64
+    tar -xzf /tmp/agy_cli.tar.gz -C /tmp/ || return 1
+    _do_install || return 1
+}
+spin_run "Installing Antigravity Engine" engine_install
 
-# Write version lock
-echo "\$AGY_VERSION" > "\$HOME/.local/share/agy/.version_lock"
-echo "[OK] agy v\$AGY_VERSION installed."
+# Маркер = sha256 установленного (непропатченного) бинаря; меняется при любой
+# переустановке/обновлении → авто-патчер перепатчит. Хардкод версии больше не нужен.
+AGY_MARK=\$(sha256sum "\$HOME/.local/bin/agy" 2>/dev/null | cut -c1-16)
+echo "\$AGY_MARK" > "\$HOME/.local/share/agy/.version_lock"
+echo "[OK] agy installed (official/latest, mark \$AGY_MARK)."
 DEBIAN_SETUP
 
     echo -e " ${G_GREEN}[OK] Setup complete!${C_RESET}"
@@ -1012,10 +1126,27 @@ DEBIAN_SETUP
 do_start_inner() {
     [ -f "$PROXY_CONFIG" ] && source "$PROXY_CONFIG"
 
+    # Текущее состояние лока обновлений — в файл, видимый контейнеру как
+    # /workspace/.update_lock (его читают start-agy.sh и check_and_patch.py).
+    mkdir -p "$WORKSPACE_DIR"
+    echo "${UPDATE_LOCK:-true}" > "$WORKSPACE_DIR/.update_lock"
+
+    # Засеять офлайн-бандл патчера в workspace из $HOME (приложение кладёт его
+    # туда всегда, без storage-разрешения) — чтобы на первом запуске run_patcher
+    # распаковал его офлайн, а не уходил в git-фолбэк.
+    if [ -f "$HOME/open-antigravity-patcher-v1.3.8.tar" ] && [ ! -s "$WORKSPACE_DIR/open-antigravity-patcher-v1.3.8.tar" ]; then
+        cp "$HOME/open-antigravity-patcher-v1.3.8.tar" "$WORKSPACE_DIR/" 2>/dev/null || true
+    fi
+
     # DNS внутри контейнера чиним при каждом старте (дешёвый getent, если жив).
     # Без этого падает всё сетевое: патчер-клон, xray-скачивание, agy-обновление.
     if [ "$IN_APP_MODE" != "true" ]; then
         ensure_debian_dns >/dev/null 2>&1 || echo -e " ${G_WARN}[!] Debian DNS repair failed — network features may not work.${C_RESET}"
+        # Kill any stale tmux processes left over from prior sessions on Android host
+        # and clean up leftover socket directories to prevent "access not allowed"
+        pkill -9 -x tmux 2>/dev/null || true
+        local _rootfs="$PREFIX/var/lib/proot-distro/installed-rootfs/debian"
+        rm -rf "$_rootfs/tmp/tmux-*" 2>/dev/null || true
     fi
 
     # Если бинаря нет (удалён вручную после установки) — не уходим в вечный
@@ -1025,7 +1156,12 @@ do_start_inner() {
     if [ "$IN_APP_MODE" = "true" ]; then
         [ -x /root/.local/bin/agy ] && _agy_ok="true"
     else
-        proot-distro login debian -- test -x /root/.local/bin/agy 2>/dev/null && _agy_ok="true"
+        local _rootfs="$PREFIX/var/lib/proot-distro/installed-rootfs/debian"
+        if [ -x "$_rootfs/root/.local/bin/agy" ]; then
+            _agy_ok="true"
+        elif proot-distro login debian -- test -x /root/.local/bin/agy 2>/dev/null; then
+            _agy_ok="true"
+        fi
     fi
     if [ "$_agy_ok" != "true" ]; then
         echo -e " ${G_WARN}[!] agy binary missing — running update to reinstall...${C_RESET}"
@@ -1076,13 +1212,16 @@ EOF
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 
+# Load proxy configuration
+[ -f /workspace/proxy_config.sh ] && source /workspace/proxy_config.sh
+
 # Install Tmux if missing
 if ! command -v tmux >/dev/null 2>&1; then
     echo -e "\e[33m[*] Installing Tmux for Overlay UI...\e[0m"
     apt-get update >/dev/null 2>&1 && apt-get install -y tmux >/dev/null 2>&1
 fi
 
-# ── Auto-patch agy binary (V1.3.4 MultiGate: x64 + arm64) ─────────────────────
+# ── Auto-patch agy binary (V1.3.8 MultiGate: x64 + arm64) ─────────────────────
 _agy_bin="$HOME/.local/bin/agy"
 _ver_lock="$HOME/.local/share/agy/.version_lock"
 _pat_mark="$HOME/.local/share/agy/.patched_version"
@@ -1090,17 +1229,21 @@ if [ -f "$_agy_bin" ] && [ -f "$_ver_lock" ]; then
     _cur_ver=$(cat "$_ver_lock" 2>/dev/null)
     _pat_ver=$(cat "$_pat_mark" 2>/dev/null)
     if [ "$_cur_ver" != "$_pat_ver" ]; then
-        echo -e "\e[34m[*]\e[0m Auto-patching agy v${_cur_ver} (V1.3.4)..."
+        echo -e "\e[34m[*]\e[0m Auto-patching agy v${_cur_ver} (V1.3.8)..."
+        _lock=$(cat /workspace/.update_lock 2>/dev/null || echo true)
         # Temporarily unlock binary for patching
         chattr -i "$_agy_bin" 2>/dev/null || true
         chmod 755 "$_agy_bin" 2>/dev/null || true
-        python3 - "$_agy_bin" "$_ver_lock" "$_pat_mark" << 'AUTOPATCH'
+        python3 - "$_agy_bin" "$_ver_lock" "$_pat_mark" "$_lock" << 'AUTOPATCH'
 import sys, re, os
 agy, ver_lock, marker = sys.argv[1], sys.argv[2], sys.argv[3]
-# V1.3.4 gates: CLI_GATE_X64 + CLI_GATE_ARM64 (unified linux+macos arm64)
+lock = (len(sys.argv) < 5 or sys.argv[4] != 'false')  # update lock: ON по умолчанию
+# V1.3.8 gates: CLI_GATE_X64 + CLI_GATE_ARM64 + ARM64_W2 + ARM64_W4 (сверено с source/patcher/agy/patcher.py)
 GATES = [
-    (re.compile(rb"\x48\x85\xc0\x0f\x84....\x80\x78\x08\x00\x0f\x85....", re.S), b"\x48\x85\xc0\x90", 9),
-    (re.compile(rb"...\xb5...\xb4\x01\x20\x40\x39...\x37", re.S), b"\x21\x00\x80\x52", 8),
+    (re.compile(rb"\x48\x85\xc0\x0f\x84....\x80\x78\x08\x00\x0f\x85....", re.S), b"\x48\x85\xc0\x90", 9),  # CLI_GATE_X64
+    (re.compile(rb"...\xb5...\xb4\x01\x20\x40\x39[\x01\x21\x41\x61\x81\xa1\xc1\xe1].[\x00-\x07]\x37" rb"...[\x94-\x97](?:\xe0\x4b\x00\xf9\xe1\x33\x00\xf9\xe2\x43\x00\xf9" rb"|\xe0\x4f\x00\xf9\xe1\x33\x00\xf9\xe2\x47\x00\xf9\xe3\x2f\x00\xf9)", re.S), b"\x21\x00\x80\x52", 8),  # CLI_GATE_ARM64
+    (re.compile(rb"[\x01\x21\x41\x61\x81\xa1\xc1\xe1]..\xb5[\x00\x20\x40\x60\x80\xa0\xc0\xe0]..\xb4" rb"\x02\x20\x40\x39[\x02\x22\x42\x62\x82\xa2\xc2\xe2].[\x00-\x07]\x37...[\x94-\x97]", re.S), b"\x22\x00\x80\x52", 8),  # CLI_GATE_ARM64_W2
+    (re.compile(rb"[\x00\x20\x40\x60\x80\xa0\xc0\xe0]..\xb4\x04\x20\x40\x39" rb"[\x04\x24\x44\x64\x84\xa4\xc4\xe4].[\x00-\x07]\x37\x04\x94\x44\xa9", re.S), b"\x24\x00\x80\x52", 4),  # CLI_GATE_ARM64_W4
 ]
 # Embedded auto-updater endpoint; replaced with equal-length junk so ELF layout survives
 UPDATER_URL = b"https://antigravity-cli-auto-updater-974169037036.us-central1.run.app"
@@ -1108,8 +1251,10 @@ DISABLED_URL = b"http://127.0.0.1:9999/disabled-auto-updater-server-url-disabled
 assert len(UPDATER_URL) == len(DISABLED_URL)
 # Паттерны УЖЕ пропатченных гейтов: отличаем «уже готов» от «гейт не найден».
 PATCHED = [
-    re.compile(rb"\x48\x85\xc0\x0f\x84....\x48\x85\xc0\x90\x0f\x85....", re.S),
-    re.compile(rb"...\xb5...\xb4\x21\x00\x80\x52...\x37", re.S),
+    re.compile(rb"\x48\x85\xc0\x0f\x84....\x48\x85\xc0\x90\x0f\x85....", re.S),  # CLI_GATE_X64
+    re.compile(rb"...\xb5...\xb4\x21\x00\x80\x52[\x01\x21\x41\x61\x81\xa1\xc1\xe1].[\x00-\x07]\x37" rb"...[\x94-\x97](?:\xe0\x4b\x00\xf9\xe1\x33\x00\xf9\xe2\x43\x00\xf9" rb"|\xe0\x4f\x00\xf9\xe1\x33\x00\xf9\xe2\x47\x00\xf9\xe3\x2f\x00\xf9)", re.S),  # CLI_GATE_ARM64
+    re.compile(rb"[\x01\x21\x41\x61\x81\xa1\xc1\xe1]..\xb5[\x00\x20\x40\x60\x80\xa0\xc0\xe0]..\xb4" rb"\x22\x00\x80\x52[\x02\x22\x42\x62\x82\xa2\xc2\xe2].[\x00-\x07]\x37...[\x94-\x97]", re.S),  # CLI_GATE_ARM64_W2
+    re.compile(rb"[\x00\x20\x40\x60\x80\xa0\xc0\xe0]..\xb4\x24\x00\x80\x52" rb"[\x04\x24\x44\x64\x84\xa4\xc4\xe4].[\x00-\x07]\x37\x04\x94\x44\xa9", re.S),  # CLI_GATE_ARM64_W4
 ]
 def _write_marker():
     ver = open(ver_lock).read().strip()
@@ -1126,13 +1271,19 @@ try:
                 data[pos:pos+len(fix)] = fix
                 hits += 1
                 print(f'  \033[32m✓\033[0m gate patched @ 0x{pos:08x} ({fix.hex()})')
-    if UPDATER_URL in bytes(data):
-        data = bytearray(bytes(data).replace(UPDATER_URL, DISABLED_URL))
-        hits += 1
-        print('  \033[32m✓\033[0m auto-updater URL neutralized')
+    if lock:
+        if UPDATER_URL in bytes(data):
+            data = bytearray(bytes(data).replace(UPDATER_URL, DISABLED_URL))
+            hits += 1
+            print('  \033[32m✓\033[0m auto-updater URL neutralized (update lock ON)')
+    else:
+        if DISABLED_URL in bytes(data):
+            data = bytearray(bytes(data).replace(DISABLED_URL, UPDATER_URL))
+            hits += 1
+            print('  \033[33m•\033[0m auto-updater URL restored (update lock OFF)')
     if hits:
         with open(agy, 'wb') as f: f.write(data)
-        print(f'\033[32m[OK]\033[0m patch applied — eligibility screen off + updater blocked (V1.3.4)')
+        print(f'\033[32m[OK]\033[0m patch applied — eligibility screen off (update lock {"ON" if lock else "OFF"}) (V1.3.8)')
         _write_marker()
     elif any(p.search(raw) for p in PATCHED):
         print('\033[34m[*]\033[0m agy already patched — marker refreshed.')
@@ -1144,10 +1295,15 @@ try:
 except Exception as e:
     print(f'\033[31m[!]\033[0m auto-patch error: {e}')
 AUTOPATCH
-        # Re-lock binary after patch (chmod работает; chattr +i без
-        # CAP_LINUX_IMMUTABLE молча no-op и в Termux, и под proot — не всерьёз).
-        chmod 444 "$_agy_bin" 2>/dev/null || true
-        chattr +i "$_agy_bin" 2>/dev/null || true
+        # Повторная блокировка только если лок обновлений включён; иначе
+        # оставляем бинарь записываемым, чтобы agy мог самообновиться.
+        if [ "$_lock" = "true" ]; then
+            chmod 555 "$_agy_bin" 2>/dev/null || true
+            chattr +i "$_agy_bin" 2>/dev/null || true
+        else
+            chattr -i "$_agy_bin" 2>/dev/null || true
+            chmod 755 "$_agy_bin" 2>/dev/null || true
+        fi
     fi
 fi
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1157,40 +1313,60 @@ fi
     cat > "$HOME/.tmux.conf" << 'TMUX_CONF'
 set -g default-terminal "xterm-256color"
 set -ag terminal-overrides ",xterm-256color:Tc"
+set -s escape-time 0
+set -g mouse on
+set -g history-limit 50000
 set -g status off
+set -g mode-style "fg=#555555,bg=default"
+bind -n Pageup copy-mode -u -e
+bind -n S-Pageup copy-mode -u -e
+bind -T copy-mode WheelUpPane select-pane \; send-keys -X -N 2 scroll-up
+bind -T copy-mode WheelDownPane select-pane \; send-keys -X -N 2 scroll-down
+bind -T copy-mode-vi WheelUpPane select-pane \; send-keys -X -N 2 scroll-up
+bind -T copy-mode-vi WheelDownPane select-pane \; send-keys -X -N 2 scroll-down
+bind -T copy-mode Escape send-keys -X cancel
+bind -T copy-mode-vi Escape send-keys -X cancel
 bind -n F12 new-window -n "Settings" "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; bash /workspace/agy-manager.sh --in-app"
 TMUX_CONF
 
 if [ "$USE_PROXY" = "true" ] && { [ "$PROXY_TYPE" = "xray" ] || [ "$PROXY_TYPE" = "hysteria2" ]; }; then
     ENGINE="xray"
-    [ -f /workspace/proxy_engine.txt ] && ENGINE=$(cat /workspace/proxy_engine.txt)
+    [ -f /workspace/proxy_engine.txt ] && ENGINE=$(cat /workspace/proxy_engine.txt 2>/dev/null)
+    [ "$PROXY_TYPE" = "hysteria2" ] && ENGINE="hysteria"
+    [ "$PROXY_TYPE" = "xray" ] && ENGINE="xray"
     pkill -x xray >/dev/null 2>&1 || true
     pkill -x hysteria >/dev/null 2>&1 || true
     if [ "$ENGINE" = "xray" ]; then
         if [ ! -f /usr/local/bin/xray ]; then
-            ARCH=$(uname -m)
-            case "$ARCH" in aarch64) XRAY_ARCH="arm64-v8a" ;; x86_64) XRAY_ARCH="64" ;; armv7l) XRAY_ARCH="arm32-v7a" ;; *) XRAY_ARCH="64" ;; esac
-            curl -# -L -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${XRAY_ARCH}.zip" \
-                && unzip -q -o /tmp/xray.zip -d /usr/local/bin/ xray \
-                && chmod +x /usr/local/bin/xray \
-                && rm -f /tmp/xray.zip
+            if [ -f /workspace/xray ]; then
+                cp /workspace/xray /usr/local/bin/xray && chmod +x /usr/local/bin/xray
+            else
+                ARCH=$(uname -m)
+                case "$ARCH" in aarch64) XRAY_ARCH="arm64-v8a" ;; x86_64) XRAY_ARCH="64" ;; armv7l) XRAY_ARCH="arm32-v7a" ;; *) XRAY_ARCH="64" ;; esac
+                curl -# -L -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${XRAY_ARCH}.zip" \
+                    && unzip -q -o /tmp/xray.zip -d /usr/local/bin/ xray \
+                    && chmod +x /usr/local/bin/xray \
+                    && rm -f /tmp/xray.zip
+            fi
         fi
         if [ -f /workspace/xray_config.json ]; then
             if [ -x /usr/local/bin/xray ]; then
                 nohup /usr/local/bin/xray run -c /workspace/xray_config.json >/tmp/xray.log 2>&1 &
             else
-                # Раньше тут молча запускался несуществующий бинарь, а agy шёл
-                # напрямую без прокси. Теперь — громкое предупреждение.
                 echo -e "\e[31m[!] PROXY CORE MISSING: /usr/local/bin/xray not installed — agy will run WITHOUT proxy! Check network and restart session.\e[0m"
                 sleep 3
             fi
         fi
     elif [ "$ENGINE" = "hysteria" ]; then
         if [ ! -f /usr/local/bin/hysteria ]; then
-            ARCH=$(uname -m)
-            case "$ARCH" in aarch64) HY_ARCH="arm64" ;; x86_64) HY_ARCH="amd64" ;; armv7l) HY_ARCH="arm" ;; *) HY_ARCH="amd64" ;; esac
-            curl -# -L -o /usr/local/bin/hysteria "https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-${HY_ARCH}" \
-                && chmod +x /usr/local/bin/hysteria
+            if [ -f /workspace/hysteria ]; then
+                cp /workspace/hysteria /usr/local/bin/hysteria && chmod +x /usr/local/bin/hysteria
+            else
+                ARCH=$(uname -m)
+                case "$ARCH" in aarch64) HY_ARCH="arm64" ;; x86_64) HY_ARCH="amd64" ;; armv7l) HY_ARCH="arm" ;; *) HY_ARCH="amd64" ;; esac
+                curl -# -L -o /usr/local/bin/hysteria "https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-${HY_ARCH}" \
+                    && chmod +x /usr/local/bin/hysteria
+            fi
         fi
         if [ -f /workspace/hysteria_config.json ]; then
             if [ -x /usr/local/bin/hysteria ]; then
@@ -1201,23 +1377,58 @@ if [ "$USE_PROXY" = "true" ] && { [ "$PROXY_TYPE" = "xray" ] || [ "$PROXY_TYPE" 
             fi
         fi
     fi
-    export HTTP_PROXY="http://127.0.0.1:$(( ${XRAY_PORT:-10808} + 1 ))"
+    local_port="${XRAY_PORT:-10808}"
+    http_port=$(( local_port + 1 ))
+    export HTTP_PROXY="http://127.0.0.1:${http_port}"
     export HTTPS_PROXY="$HTTP_PROXY"
-    export ALL_PROXY="$HTTP_PROXY"
+    export ALL_PROXY="socks5h://127.0.0.1:${local_port}"
+    export http_proxy="$HTTP_PROXY"
+    export https_proxy="$HTTPS_PROXY"
+    export all_proxy="$ALL_PROXY"
+    export GRPC_PROXY="$HTTP_PROXY"
+    export grpc_proxy="$HTTP_PROXY"
+    export NO_PROXY="localhost,127.0.0.1"
+    export no_proxy="$NO_PROXY"
 fi
 if [ "$USE_PROXY" = "true" ] && [ "$PROXY_TYPE" != "xray" ] && [ "$PROXY_TYPE" != "hysteria2" ]; then
     export HTTP_PROXY="${PROXY_TYPE}://${PROXY_ADDR}:${PROXY_PORT}"
     export HTTPS_PROXY="$HTTP_PROXY"
     export ALL_PROXY="$HTTP_PROXY"
+    export http_proxy="$HTTP_PROXY"
+    export https_proxy="$HTTPS_PROXY"
+    export all_proxy="$ALL_PROXY"
+    export GRPC_PROXY="$HTTP_PROXY"
+    export grpc_proxy="$HTTP_PROXY"
+    export NO_PROXY="localhost,127.0.0.1"
+    export no_proxy="$NO_PROXY"
 fi
 
-cat > "$WORKSPACE_DIR/check_and_patch.py" << 'CHECK_PATCH'
+cat > "/workspace/check_and_patch.py" << 'CHECK_PATCH'
 import sys, re, os, subprocess
 agy = os.path.expanduser("~/.local/bin/agy")
-# V1.3.4 MultiGate (x64 + arm64 unified)
+try:
+    with open("/workspace/.update_lock") as _f: lock = (_f.read().strip() != "false")
+except Exception:
+    lock = True  # update lock ON по умолчанию
+
+cache_file = os.path.expanduser("~/.local/share/agy/.patch_cache")
+try:
+    if os.path.exists(agy):
+        st = os.stat(agy)
+        cur_key = f"{st.st_size}_{st.st_mtime_ns}_{lock}_v1.3.8"
+        if os.path.exists(cache_file):
+            with open(cache_file, "r") as _cf:
+                if _cf.read().strip() == cur_key:
+                    sys.exit(0)
+except Exception:
+    pass
+
+# V1.3.8 MultiGate: X64 + ARM64 + ARM64_W2 + ARM64_W4 (сверено с source/patcher/agy/patcher.py)
 GATES = [
-    (re.compile(rb"\x48\x85\xc0\x0f\x84....\x80\x78\x08\x00\x0f\x85....", re.S), b"\x48\x85\xc0\x90", 9),
-    (re.compile(rb"...\xb5...\xb4\x01\x20\x40\x39...\x37", re.S), b"\x21\x00\x80\x52", 8),
+    (re.compile(rb"\x48\x85\xc0\x0f\x84....\x80\x78\x08\x00\x0f\x85....", re.S), b"\x48\x85\xc0\x90", 9),  # CLI_GATE_X64
+    (re.compile(rb"...\xb5...\xb4\x01\x20\x40\x39[\x01\x21\x41\x61\x81\xa1\xc1\xe1].[\x00-\x07]\x37" rb"...[\x94-\x97](?:\xe0\x4b\x00\xf9\xe1\x33\x00\xf9\xe2\x43\x00\xf9" rb"|\xe0\x4f\x00\xf9\xe1\x33\x00\xf9\xe2\x47\x00\xf9\xe3\x2f\x00\xf9)", re.S), b"\x21\x00\x80\x52", 8),  # CLI_GATE_ARM64
+    (re.compile(rb"[\x01\x21\x41\x61\x81\xa1\xc1\xe1]..\xb5[\x00\x20\x40\x60\x80\xa0\xc0\xe0]..\xb4" rb"\x02\x20\x40\x39[\x02\x22\x42\x62\x82\xa2\xc2\xe2].[\x00-\x07]\x37...[\x94-\x97]", re.S), b"\x22\x00\x80\x52", 8),  # CLI_GATE_ARM64_W2
+    (re.compile(rb"[\x00\x20\x40\x60\x80\xa0\xc0\xe0]..\xb4\x04\x20\x40\x39" rb"[\x04\x24\x44\x64\x84\xa4\xc4\xe4].[\x00-\x07]\x37\x04\x94\x44\xa9", re.S), b"\x24\x00\x80\x52", 4),  # CLI_GATE_ARM64_W4
 ]
 # Embedded auto-updater endpoint; equal-length replacement keeps ELF layout intact
 UPDATER_URL = b"https://antigravity-cli-auto-updater-974169037036.us-central1.run.app"
@@ -1226,6 +1437,7 @@ assert len(UPDATER_URL) == len(DISABLED_URL)
 try:
     if not os.path.exists(agy):
         sys.exit(0)
+    os.system(f"chattr -i {agy} 2>/dev/null")  # снять возможную иммутабельность для перезаписи
     with open(agy, 'rb') as f: data = bytearray(f.read())
     hits = 0
     for sig, fix, off in GATES:
@@ -1234,11 +1446,17 @@ try:
             if data[pos:pos+len(fix)] != fix:
                 data[pos:pos+len(fix)] = fix
                 hits += 1
-                print(f'\033[34m[*]\033[0m Auto-patcher (V1.3.4): gate patched @ 0x{pos:08x}')
-    if UPDATER_URL in bytes(data):
-        data = bytearray(bytes(data).replace(UPDATER_URL, DISABLED_URL))
-        hits += 1
-        print('\033[34m[*]\033[0m Auto-patcher (V1.3.4): auto-updater URL neutralized')
+                print(f'\033[34m[*]\033[0m Auto-patcher (V1.3.8): gate patched @ 0x{pos:08x}')
+    if lock:
+        if UPDATER_URL in bytes(data):
+            data = bytearray(bytes(data).replace(UPDATER_URL, DISABLED_URL))
+            hits += 1
+            print('\033[34m[*]\033[0m Auto-patcher (V1.3.8): auto-updater URL neutralized (lock ON)')
+    else:
+        if DISABLED_URL in bytes(data):
+            data = bytearray(bytes(data).replace(DISABLED_URL, UPDATER_URL))
+            hits += 1
+            print('\033[33m[*]\033[0m Auto-patcher: auto-updater URL restored (lock OFF)')
     if hits:
         # Prevent "Text file busy" or "Permission denied"
         os.system("pkill -9 -x agy 2>/dev/null")
@@ -1247,7 +1465,22 @@ try:
         with open(f"{agy}.tmp", 'wb') as f: f.write(data)
         os.system(f"chmod 755 {agy}.tmp")
         os.system(f"mv -f {agy}.tmp {agy}")
-        print(f'\033[32m[OK]\033[0m patch applied — gates off + updater blocked (V1.3.4)')
+        print(f'\033[32m[OK]\033[0m patch applied — gates off (update lock {"ON" if lock else "OFF"}) (V1.3.8)')
+    # Привести права бинаря к состоянию лока: ON → иммутабельный, OFF → записываемый.
+    if lock:
+        os.system(f"chmod 555 {agy} 2>/dev/null")
+        os.system(f"chattr +i {agy} 2>/dev/null")
+    else:
+        os.system(f"chattr -i {agy} 2>/dev/null")
+        os.system(f"chmod 755 {agy} 2>/dev/null")
+    try:
+        new_st = os.stat(agy)
+        new_key = f"{new_st.st_size}_{new_st.st_mtime_ns}_{lock}_v1.3.8"
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        with open(cache_file, "w") as _cf:
+            _cf.write(new_key)
+    except Exception:
+        pass
 except Exception as e:
     print(f'\033[31m[!]\033[0m auto-patch error: {e}')
 CHECK_PATCH
@@ -1260,6 +1493,55 @@ while true; do
         python3 /workspace/check_and_patch.py
     fi
 
+    # Ensure proxy environment is loaded
+    if [ -f /workspace/proxy_config.sh ]; then
+        source /workspace/proxy_config.sh
+        if [ "$USE_PROXY" = "true" ]; then
+            _local_port="${XRAY_PORT:-10808}"
+            _http_port=$(( _local_port + 1 ))
+            if [ "$PROXY_TYPE" = "xray" ] || [ "$PROXY_TYPE" = "hysteria2" ]; then
+                export HTTP_PROXY="http://127.0.0.1:${_http_port}"
+                export HTTPS_PROXY="$HTTP_PROXY"
+                export ALL_PROXY="socks5h://127.0.0.1:${_local_port}"
+                export http_proxy="$HTTP_PROXY"
+                export https_proxy="$HTTPS_PROXY"
+                export all_proxy="$ALL_PROXY"
+                export GRPC_PROXY="$HTTP_PROXY"
+                export grpc_proxy="$HTTP_PROXY"
+            else
+                export HTTP_PROXY="${PROXY_TYPE}://${PROXY_ADDR}:${PROXY_PORT}"
+                export HTTPS_PROXY="$HTTP_PROXY"
+                export ALL_PROXY="$HTTP_PROXY"
+                export http_proxy="$HTTP_PROXY"
+                export https_proxy="$HTTPS_PROXY"
+                export all_proxy="$ALL_PROXY"
+                export GRPC_PROXY="$HTTP_PROXY"
+                export grpc_proxy="$HTTP_PROXY"
+            fi
+            export NO_PROXY="localhost,127.0.0.1"
+            export no_proxy="$NO_PROXY"
+        else
+            unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy GRPC_PROXY grpc_proxy NO_PROXY no_proxy
+        fi
+    fi
+
+    # Ensure we are in target directory from .last_dir
+    TARGET_DIR="/workspace"
+    if [ -f /workspace/.last_dir ]; then
+        SAVED_DIR=$(cat /workspace/.last_dir 2>/dev/null | tr -d '\r\n')
+        SAVED_DIR="${SAVED_DIR//\/storage\/emulated\/0\//\/sdcard\/}"
+        if [[ "$SAVED_DIR" == "/sdcard/AntigravityWorkspace"* ]]; then
+            CANDIDATE="/workspace${SAVED_DIR#/sdcard/AntigravityWorkspace}"
+            [ -d "$CANDIDATE" ] && TARGET_DIR="$CANDIDATE"
+        elif [ -d "$SAVED_DIR" ]; then
+            TARGET_DIR="$SAVED_DIR"
+        elif [[ "$SAVED_DIR" == "/sdcard"* ]]; then
+            CANDIDATE="/phone${SAVED_DIR#/sdcard}"
+            [ -d "$CANDIDATE" ] && TARGET_DIR="$CANDIDATE"
+        fi
+    fi
+    cd "$TARGET_DIR" 2>/dev/null || cd /workspace
+
     if command -v agy > /dev/null 2>&1; then
         agy "$@"
     elif [ -f "$HOME/.local/bin/agy" ]; then
@@ -1268,14 +1550,16 @@ while true; do
         bash
     fi
     echo -e "\n\e[33m[!] AGY session closed. Restarting... (Ctrl+C to exit)\e[0m"
-    sleep 2
+    sleep 1
+    clear
 done
 RUN_AGY
 chmod +x "/workspace/run-agy.sh"
 
 if command -v tmux >/dev/null 2>&1; then
-    tmux kill-session -t agy_session 2>/dev/null || true
-    exec tmux -u -f "$HOME/.tmux.conf" new-session -s agy_session "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; bash /workspace/run-agy.sh"
+    pkill -9 -x tmux 2>/dev/null || true
+    rm -rf /tmp/tmux-* 2>/dev/null || true
+    exec tmux -u -f "$HOME/.tmux.conf" new-session -s agy_session "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; bash /workspace/run-agy.sh" || exec bash "/workspace/run-agy.sh" "$@"
 else
     exec bash "/workspace/run-agy.sh" "$@"
 fi
@@ -1294,18 +1578,11 @@ check_and_apply_upgrades() {
     # If no extra-keys at all — append clean block.
     # If extra-keys exists but broken (has 'macro:' or no 'F12') — nuke block and rewrite.
     local needs_rewrite="false"
-    if ! grep -q 'extra-keys' "$props" 2>/dev/null; then
+    if ! grep -q '^[[:space:]]*extra-keys' "$props" 2>/dev/null; then
         needs_rewrite="true"
     elif grep -q 'macro' "$props" 2>/dev/null || ! grep -q 'F12' "$props" 2>/dev/null; then
-        # Remove the broken extra-keys block entirely using python3 (avoids sed regex hell)
-        python3 -c "
-import re
-try:
-    with open('$props', 'r') as f: c = f.read()
-    c = re.sub(r'\nextra-keys\s*=\s*\[.*?\]', '', c, flags=re.DOTALL)
-    with open('$props', 'w') as f: f.write(c)
-except: pass
-" 2>/dev/null || true
+        # Remove the broken extra-keys block cleanly
+        sed -i '/^[[:space:]]*extra-keys/,/^[[:space:]]*\]/d' "$props" 2>/dev/null || true
         needs_rewrite="true"
     fi
 
@@ -1424,7 +1701,7 @@ M_CHOICE=$(cat /workspace/.mirror_region 2>/dev/null | tr -d '\r\n' || echo 1)
 AGY_VERSION="1.1.26"
 AGY_VERSION=$(echo "$AGY_VERSION" | tr -d '\r\n')
 readonly AGY_VERSION
-# STRICT PIN: V1.3.4 a4c6608 — см. VERSIONS.lock
+# STRICT PIN: V1.3.8 fe12d5b — см. VERSIONS.lock
 
 if [ "$M_CHOICE" = "1" ]; then
     MIRRORS=(
@@ -1467,13 +1744,6 @@ verify_engine() {
     _list=$(tar tzf /tmp/agy_cli.tar.gz 2>/dev/null) || return 1
     echo "$_list" | grep -qE '(^|/)(antigravity|agy)$' || return 1
 }
-spin_run "Downloading Engine Update" download_engine || FAILED=1
-spin_run "Verifying Engine Archive" verify_engine || FAILED=1
-# Трупы прошлых попыток (частичный /tmp/antigravity) — снести, иначе их
-# подберёт _do_install вместо свежего файла.
-rm -rf /tmp/antigravity /tmp/agy /tmp/agy_cli_linux_arm64
-spin_run "Extracting Engine Archives" tar -xzf /tmp/agy_cli.tar.gz -C /tmp/ || FAILED=1
-
 _do_install() {
     local _bin=""
     for _c in /tmp/antigravity /tmp/agy /tmp/agy_cli_linux_arm64/antigravity; do
@@ -1489,10 +1759,31 @@ _do_install() {
     chmod +x "$HOME/.local/bin/agy" 2>/dev/null || true
     rm -rf /tmp/agy_cli.tar.gz /tmp/agy_cli_linux_arm64
 }
-spin_run "Deploying Executable" _do_install || FAILED=1
+# Официальный установщик (SHA512, latest); exits early если agy уже есть → сносим.
+install_official() {
+    rm -f "$HOME/.local/bin/agy"
+    curl -fsSL https://antigravity.google/cli/install.sh | bash || return 1
+    [ -x "$HOME/.local/bin/agy" ] || return 1
+    local _sz; _sz=$(stat -c %s "$HOME/.local/bin/agy" 2>/dev/null || echo 0)
+    [ "$_sz" -ge 20000000 ] || return 1
+}
+engine_install() {
+    if install_official; then return 0; fi
+    echo "[*] Official installer unavailable — falling back to GitHub mirrors..."
+    download_engine || return 1
+    verify_engine || return 1
+    rm -rf /tmp/antigravity /tmp/agy /tmp/agy_cli_linux_arm64
+    tar -xzf /tmp/agy_cli.tar.gz -C /tmp/ || return 1
+    _do_install || return 1
+}
+spin_run "Installing Antigravity Engine" engine_install || FAILED=1
 
 if [ "$FAILED" -eq 0 ]; then
-    echo "$AGY_VERSION" > "$HOME/.local/share/agy/.version_lock"
+    # Маркер = sha256 свежего (непропатченного) бинаря; меняется при каждой
+    # переустановке → авто-патчер гарантированно перепатчит новый бинарь.
+    AGY_MARK=$(sha256sum "$HOME/.local/bin/agy" 2>/dev/null | cut -c1-16)
+    echo "$AGY_MARK" > "$HOME/.local/share/agy/.version_lock"
+    rm -f "$HOME/.local/share/agy/.patch_cache" 2>/dev/null || true
 else
     # Не врём про успех и не пишем version_lock по битому состоянию;
     # маркер увидит хостовая часть do_update (ниже) через /workspace.
@@ -1517,7 +1808,7 @@ INSTALL_SCRIPT
         echo -e "  \e[90mPress any key to continue...\e[0m"
         drain_stdin; read -rsn1
     else
-        echo -e "\n  \e[38;5;46m[OK] Engine successfully updated to v1.1.26\e[0m"
+        echo -e "\n  \e[38;5;46m[OK] Engine successfully updated (latest).\e[0m"
         echo -e "  \e[90mPress any key to continue...\e[0m"
         drain_stdin; read -rsn1
     fi
@@ -1527,46 +1818,89 @@ run_patcher() {
     clear
     show_header
     echo -e " ${G2}[*] Initializing Patcher...${C_RESET}"
+    rm -f /root/.local/share/agy/.patch_cache "$HOME/.local/share/agy/.patch_cache" 2>/dev/null || true
     
-    PATCHER_DIR=""
-    if [ -f "$WORKSPACE_DIR/open-antigravity-patcher/source/main.py" ]; then
-        PATCHER_DIR="open-antigravity-patcher"
-    else
-        rm -rf "$WORKSPACE_DIR/open-antigravity-patcher"
-        echo -e " ${G_GRAY}[*] Cloning Patcher V1.3.4 from GitHub...${C_RESET}"
-        if [ "$IN_APP_MODE" = "true" ]; then
-            git clone --branch V1.3.4 https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher 2>/dev/null || git clone https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher && git -C /workspace/open-antigravity-patcher checkout V1.3.4 2>/dev/null || true
+    # Патчер поставляется ОФЛАЙН как ассет приложения
+    # (open-antigravity-patcher-v1.3.8.tar в workspace), как и Debian rootfs.
+    # ВАЖНО: tar НЕ сжат gzip — aapt гунзипует .gz-ассеты и срезает расширение,
+    # поэтому бандл шлём как plain .tar (APK всё равно DEFLATE-ит его в zip).
+    local PATCHER_DIR="open-antigravity-patcher"
+    local _bundle="open-antigravity-patcher-v1.3.8.tar"
+
+    if [ ! -f "$WORKSPACE_DIR/$PATCHER_DIR/source/main.py" ]; then
+        rm -rf "${WORKSPACE_DIR:?}/$PATCHER_DIR"
+        if [ -f "$WORKSPACE_DIR/$_bundle" ]; then
+            echo -e " ${G_GRAY}[*] Unpacking bundled Patcher v1.3.8 (offline)...${C_RESET}"
+            if [ "$IN_APP_MODE" = "true" ]; then
+                mkdir -p "/workspace/$PATCHER_DIR"
+                tar xf "/workspace/$_bundle" -C "/workspace/$PATCHER_DIR" 2>/dev/null || true
+            else
+                proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "mkdir -p /workspace/$PATCHER_DIR && tar xf /workspace/$_bundle -C /workspace/$PATCHER_DIR" 2>/dev/null || true
+            fi
         else
-            proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "git clone --branch V1.3.4 https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher 2>/dev/null || (git clone https://github.com/AvenCores/open-antigravity-patcher.git /workspace/open-antigravity-patcher && git -C /workspace/open-antigravity-patcher checkout V1.3.4 2>/dev/null || true)" 2>/dev/null || true
+            # Dev-фолбэк (запуск вне приложения, бандла нет): строго v1.3.8.
+            # GIT_TERMINAL_PROMPT=0 — не висеть на запросе логина, если репо
+            # приватен/удалён, а падать сразу (бандл — основной путь).
+            echo -e " ${G_GRAY}[*] Bundle not found — cloning Patcher V1.3.8 from GitHub...${C_RESET}"
+            if [ "$IN_APP_MODE" = "true" ]; then
+                if ! GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch V1.3.8 https://github.com/AvenCores/open-antigravity-patcher.git "/workspace/$PATCHER_DIR" 2>/dev/null; then
+                    GIT_TERMINAL_PROMPT=0 git clone https://github.com/AvenCores/open-antigravity-patcher.git "/workspace/$PATCHER_DIR" 2>/dev/null \
+                        && git -C "/workspace/$PATCHER_DIR" checkout fe12d5b 2>/dev/null || true
+                fi
+            else
+                proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c '
+                    export GIT_TERMINAL_PROMPT=0
+                    repo="https://github.com/AvenCores/open-antigravity-patcher.git"
+                    if ! git clone --depth 1 --branch V1.3.8 "$repo" /workspace/open-antigravity-patcher 2>/dev/null; then
+                        git clone "$repo" /workspace/open-antigravity-patcher 2>/dev/null \
+                            && git -C /workspace/open-antigravity-patcher checkout fe12d5b 2>/dev/null || true
+                    fi' 2>/dev/null || true
+            fi
         fi
-        PATCHER_DIR="open-antigravity-patcher"
     fi
-    
-    if [ -n "$PATCHER_DIR" ]; then
-        # V1.3.4 already contains unified MultiGate (x64+arm64); no hotfix needed.
-        # Ensure we are on V1.3.4 tag — checkout if cloned without tag.
+
+    if [ -f "$WORKSPACE_DIR/$PATCHER_DIR/source/main.py" ]; then
+        echo -e "\r\e[2K  \e[38;5;46m[ ✓ ] Patcher v1.3.8 ready\e[0m"
         if [ "$IN_APP_MODE" = "true" ]; then
-            # If repo has no V1.3.4 tag, try to checkout it
-            if [ -d "/workspace/open-antigravity-patcher/.git" ]; then
-                git -C /workspace/open-antigravity-patcher fetch --tags >/dev/null 2>&1 || true
-                git -C /workspace/open-antigravity-patcher checkout V1.3.4 >/dev/null 2>&1 || git -C /workspace/open-antigravity-patcher checkout a4c6608 >/dev/null 2>&1 || true
-            fi
-            export PATCHER_DIR="$PATCHER_DIR"
             export TERM=xterm-256color
-            echo -e "\r\e[2K  \e[38;5;46m[ ✓ ] Patcher V1.3.4 ready\e[0m"
-            python3 /workspace/$PATCHER_DIR/source/main.py
+            python3 "/workspace/$PATCHER_DIR/source/main.py"
         else
-            if proot-distro login debian -- true 2>/dev/null; then
-                proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "cd /workspace/open-antigravity-patcher && git fetch --tags >/dev/null 2>&1; git checkout V1.3.4 >/dev/null 2>&1 || git checkout a4c6608 >/dev/null 2>&1 || true" 2>/dev/null || true
-            fi
-            echo -e "\r\e[2K  \e[38;5;46m[ ✓ ] Patcher V1.3.4 ready\e[0m"
-            proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "export TERM=xterm-256color; export PATCHER_DIR=$PATCHER_DIR; python3 /workspace/\$PATCHER_DIR/source/main.py"
+            proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c "export TERM=xterm-256color; python3 /workspace/$PATCHER_DIR/source/main.py"
         fi
-        rm -f "$WORKSPACE_DIR/__apply_patcher.py"
     else
         echo -e " ${G_RED}[!] Failed to load patcher.${C_RESET}"
         sleep 2
     fi
+}
+
+do_toggle_update_lock() {
+    [ -f "$PROXY_CONFIG" ] && source "$PROXY_CONFIG"
+    if [ "$UPDATE_LOCK" = "false" ]; then UPDATE_LOCK="true"; else UPDATE_LOCK="false"; fi
+    # Персист в PROXY_CONFIG (добавляем ключ, если его там ещё нет).
+    if grep -q '^UPDATE_LOCK=' "$PROXY_CONFIG" 2>/dev/null; then
+        sed -i "s/^UPDATE_LOCK=.*/UPDATE_LOCK=\"$UPDATE_LOCK\"/" "$PROXY_CONFIG"
+    else
+        echo "UPDATE_LOCK=\"$UPDATE_LOCK\"" >> "$PROXY_CONFIG"
+    fi
+    # Флаг для скриптов внутри контейнера (start-agy.sh / check_and_patch.py).
+    mkdir -p "$WORKSPACE_DIR"
+    echo "$UPDATE_LOCK" > "$WORKSPACE_DIR/.update_lock"
+
+    clear
+    show_header
+    if [ "$UPDATE_LOCK" = "true" ]; then
+        echo -e " ${G_GREEN}[OK] Update Lock ENABLED — auto-updater blocked, binary pinned & patched.${C_RESET}"
+    else
+        echo -e " ${G_WARN}[!] Update Lock DISABLED — Antigravity may self-update (patch re-applies on next launch).${C_RESET}"
+    fi
+    # Если сессия активна (overlay) — применяем прямо сейчас: check_and_patch.py
+    # читает .update_lock и либо глушит+лочит, либо разлочивает+возвращает URL.
+    if [ "$IN_APP_MODE" = "true" ] && [ -f /workspace/check_and_patch.py ]; then
+        echo -e " ${G_GRAY}[*] Applying...${C_RESET}"
+        python3 /workspace/check_and_patch.py 2>/dev/null || true
+    fi
+    echo -e " ${G_GRAY}Press any key to continue...${C_RESET}"
+    drain_stdin; read -rsn1
 }
 
 do_configure_proxy() {
@@ -1590,7 +1924,14 @@ do_configure_proxy() {
         if [ "$sel" -eq 0 ]; then
             if [ "$USE_PROXY" = "true" ]; then USE_PROXY="false"; else USE_PROXY="true"; fi
             sed -i "s/USE_PROXY=.*/USE_PROXY=\"$USE_PROXY\"/" "$PROXY_CONFIG"
-            [ "$IN_APP_MODE" = "true" ] && restart_proxy_core
+            if [ "$IN_APP_MODE" = "true" ]; then
+                restart_proxy_core
+                echo -e " ${G_GRAY}Press any key to continue...${C_RESET}"
+                drain_stdin; read -rsn1
+                local rOpts=("1. ⚡ Restart Session Now" "2. ↩ Later")
+                invoke_menu "RESTART SESSION FOR PROXY?" "${rOpts[@]}"
+                if [ $? -eq 0 ]; then restart_session; fi
+            fi
         elif [ "$sel" -eq 1 ]; then
             local p_opts=("1. xray (VLESS/Reality)" "2. hysteria2 (UDP High Speed)" "3. socks5" "4. http" "0. Back")
             invoke_menu "SELECT PROTOCOL" "${p_opts[@]}"
@@ -1601,7 +1942,14 @@ do_configure_proxy() {
             elif [ "$p_sel" -eq 3 ]; then PROXY_TYPE="http"
             fi
             sed -i "s/PROXY_TYPE=.*/PROXY_TYPE=\"$PROXY_TYPE\"/" "$PROXY_CONFIG"
-            [ "$IN_APP_MODE" = "true" ] && restart_proxy_core
+            if [ "$IN_APP_MODE" = "true" ]; then
+                restart_proxy_core
+                echo -e " ${G_GRAY}Press any key to continue...${C_RESET}"
+                drain_stdin; read -rsn1
+                local rOpts=("1. ⚡ Restart Session Now" "2. ↩ Later")
+                invoke_menu "RESTART SESSION FOR PROXY?" "${rOpts[@]}"
+                if [ $? -eq 0 ]; then restart_session; fi
+            fi
         elif [ "$sel" -eq 2 ]; then
             clear
             show_header
@@ -1623,14 +1971,26 @@ do_configure_proxy() {
                     mv "$WORKSPACE_DIR/vless_link_temp.txt" "$WORKSPACE_DIR/vless_link.txt"
                     USE_PROXY="true"
                     sed -i 's/USE_PROXY=.*/USE_PROXY="true"/' "$PROXY_CONFIG"
-                    echo -e "\n ${G_GREEN}[OK] URL imported successfully!${C_RESET}"
-                    [ "$IN_APP_MODE" = "true" ] && restart_proxy_core
+                    if [ -f "$WORKSPACE_DIR/proxy_engine.txt" ]; then
+                        local eng; eng=$(cat "$WORKSPACE_DIR/proxy_engine.txt" 2>/dev/null)
+                        if [ "$eng" = "hysteria" ]; then PROXY_TYPE="hysteria2"; elif [ "$eng" = "xray" ]; then PROXY_TYPE="xray"; fi
+                        sed -i "s/PROXY_TYPE=.*/PROXY_TYPE=\"$PROXY_TYPE\"/" "$PROXY_CONFIG"
+                    fi
+                    echo -e "\n ${G_GREEN}[OK] URL imported successfully! (${PROXY_TYPE})${C_RESET}"
+                    if [ "$IN_APP_MODE" = "true" ]; then
+                        restart_proxy_core
+                        echo -e " ${G_GRAY}Press any key to continue...${C_RESET}"
+                        drain_stdin; read -rsn1
+                        local rOpts=("1. ⚡ Restart Session Now" "2. ↩ Later")
+                        invoke_menu "RESTART SESSION FOR PROXY?" "${rOpts[@]}"
+                        if [ $? -eq 0 ]; then restart_session; fi
+                    fi
                 else
                     rm -f "$WORKSPACE_DIR/vless_link_temp.txt"
                     echo -e "\n ${G_RED}[!] Failed to parse URL.${C_RESET}"
+                    echo -e " ${G_GRAY}Press any key to continue...${C_RESET}"
+                    drain_stdin; read -rsn1
                 fi
-                echo -e " ${G_GRAY}Press any key to continue...${C_RESET}"
-                drain_stdin; read -rsn1
             fi
         fi
     done
@@ -1704,15 +2064,13 @@ do_directory_picker() {
         elif [[ "$display_path" == "/sdcard"* ]]; then
             display_path="/phone${display_path#/sdcard}"
         fi
-        clear
-        show_header
-        echo -e " ${G_WARN}[✓] Working directory changed to:${C_RESET}"
-        echo -e "   ${G_WHITE}${C_BOLD}${display_path}${C_RESET}"
-        echo ""
-        echo -e " ${G_GRAY}Change takes effect after session restart.${C_RESET}"
-        echo -e " ${G_WHITE}Restart Antigravity session now? [y/N]${C_RESET} "
-        drain_stdin; read -rsn1 ans
-        if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
+        local restartOpts=(
+            "1. ⚡ Restart Session Now"
+            "2. ↩ Later (Return to Menu)"
+        )
+        invoke_menu "RESTART SESSION?" "${restartOpts[@]}"
+        local rChoice=$?
+        if [ "$rChoice" -eq 0 ]; then
             restart_session
         fi
     fi
@@ -1760,7 +2118,9 @@ main_loop() {
         local W=$(get_console_width)
         local isMobile="false"
         if [ $((W - 4)) -lt 68 ]; then isMobile="true"; fi
-        
+
+        local lockBadge="ON"; [ "${UPDATE_LOCK:-true}" = "false" ] && lockBadge="OFF"
+
         local mainOptions=()
         if [ "$isMobile" = "true" ]; then
             if [ "$IN_APP_MODE" = "true" ]; then
@@ -1769,7 +2129,8 @@ main_loop() {
                     "2. 🌐 Network & Proxy"
                     "3. 🔄 Update Antigravity"
                     "4. 🛠️ Run Patcher"
-                    "5. 🗙 Restart Session"
+                    "5. 🔒 Update Lock [ $lockBadge ]"
+                    "6. 🗙 Restart Session"
                     "0. ↩ Close Settings"
                 )
             else
@@ -1779,7 +2140,8 @@ main_loop() {
                     "3. Update CLI"
                     "4. Network & Proxy"
                     "5. Run Patcher"
-                    "6. Debian Shell"
+                    "6. Update Lock [ $lockBadge ]"
+                    "7. Debian Shell"
                     "0. Exit"
                 )
             fi
@@ -1790,7 +2152,8 @@ main_loop() {
                     "2. 🌐 Network & Proxy Settings"
                     "3. 🔄 Update Antigravity CLI"
                     "4. 🛠️ Run Antigravity Patcher"
-                    "5. 🗙 Restart Antigravity Session"
+                    "5. 🔒 Update Lock [ $lockBadge ]"
+                    "6. 🗙 Restart Antigravity Session"
                     "0. ↩ Return to App (Close Overlay)"
                 )
             else
@@ -1800,7 +2163,8 @@ main_loop() {
                     "3. Update Antigravity CLI"
                     "4. Network & Proxy Settings"
                     "5. Run Antigravity Patcher"
-                    "6. Enter Debian Shell"
+                    "6. Update Lock [ $lockBadge ]"
+                    "7. Enter Debian Shell"
                     "0. Exit Manager"
                 )
             fi
@@ -1812,34 +2176,36 @@ main_loop() {
         invoke_menu "$title" "${mainOptions[@]}"
         local selection=$?
         
-        if [ "$selection" -eq 255 ] || ([ "$selection" -eq 5 ] && [ "$IN_APP_MODE" = "true" ]); then
+        if [ "$selection" -eq 255 ] || ([ "$selection" -eq 6 ] && [ "$IN_APP_MODE" = "true" ]); then
             clear
             echo -e "${G2}[*] Closing settings overlay. Returning to Antigravity...${C_RESET}"
             break
-        elif [ "$selection" -eq 6 ] && [ "$IN_APP_MODE" = "false" ]; then
+        elif [ "$selection" -eq 7 ] && [ "$IN_APP_MODE" = "false" ]; then
             clear
             echo -e "${G2}[*] Exiting AgyCli Manager. Goodbye!${C_RESET}"
             exit 0
         fi
-        
+
         if [ "$IN_APP_MODE" = "true" ]; then
             case "$selection" in
                 0) do_directory_picker ;;
                 1) do_configure_proxy ;;
                 2) do_update ;;
                 3) run_patcher ;;
-                4) restart_session ;;
+                4) do_toggle_update_lock ;;
+                5) restart_session ;;
             esac
         else
             case "$selection" in
-                0) 
+                0)
                     do_start
                     ;;
                 1) do_directory_picker ;;
                 2) do_update ;;
                 3) do_configure_proxy ;;
                 4) run_patcher ;;
-                5) do_shell ;;
+                5) do_toggle_update_lock ;;
+                6) do_shell ;;
             esac
         fi
     done
