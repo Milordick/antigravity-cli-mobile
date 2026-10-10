@@ -1847,14 +1847,14 @@ run_patcher() {
             # приватен/удалён, а падать сразу (бандл — основной путь).
             echo -e " ${G_GRAY}[*] Bundle not found — cloning Patcher V1.3.8 from GitHub...${C_RESET}"
             if [ "$IN_APP_MODE" = "true" ]; then
-                if ! GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch V1.3.8 https://github.com/AvenCores/open-antigravity-patcher.git "/workspace/$PATCHER_DIR" 2>/dev/null; then
-                    GIT_TERMINAL_PROMPT=0 git clone https://github.com/AvenCores/open-antigravity-patcher.git "/workspace/$PATCHER_DIR" 2>/dev/null \
+                if ! GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch V1.3.8 https://gitlab.com/avencores/open-antigravity-patcher.git "/workspace/$PATCHER_DIR" 2>/dev/null; then
+                    GIT_TERMINAL_PROMPT=0 git clone https://gitlab.com/avencores/open-antigravity-patcher.git "/workspace/$PATCHER_DIR" 2>/dev/null \
                         && git -C "/workspace/$PATCHER_DIR" checkout fe12d5b 2>/dev/null || true
                 fi
             else
                 proot-distro login debian --bind "$WORKSPACE_DIR:/workspace" -- /bin/bash -c '
                     export GIT_TERMINAL_PROMPT=0
-                    repo="https://github.com/AvenCores/open-antigravity-patcher.git"
+                    repo="https://gitlab.com/avencores/open-antigravity-patcher.git"
                     if ! git clone --depth 1 --branch V1.3.8 "$repo" /workspace/open-antigravity-patcher 2>/dev/null; then
                         git clone "$repo" /workspace/open-antigravity-patcher 2>/dev/null \
                             && git -C /workspace/open-antigravity-patcher checkout fe12d5b 2>/dev/null || true

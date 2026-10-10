@@ -46,7 +46,7 @@ This project stands on the shoulders of giants:
 | Component | Author | Role |
 |---|---|---|
 | [Termux App](https://github.com/termux/termux-app) | Termux Team | Core terminal emulator, bootstrap installer, proot-distro runtime |
-| [open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher) | AvenCores | Binary patcher that removes the regional eligibility gate from the AGY CLI |
+| [open-antigravity-patcher](https://gitlab.com/avencores/open-antigravity-patcher) | AvenCores | Binary patcher that removes the regional eligibility gate from the AGY CLI |
 | [Xray-core](https://github.com/XTLS/Xray-core) | XTLS Project | VLESS/XTLS Reality proxy engine (downloaded on-demand) |
 | Hysteria 2 | Hysteria Project | UDP-based proxy engine (downloaded on-demand) |
 
@@ -120,7 +120,7 @@ All configs persist in `/sdcard/AntigravityWorkspace/` — accessible from both 
 
 ### 5. 🛡️ Automatic AGY Binary Patcher (Region Bypass)
 
-The AGY CLI binary contains eligibility checks blocking use outside specific regions. The app integrates a heavily modified **[open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher)** workflow with pinned version execution:
+The AGY CLI binary contains eligibility checks blocking use outside specific regions. The app integrates a heavily modified **[open-antigravity-patcher](https://gitlab.com/avencores/open-antigravity-patcher)** workflow with pinned version execution:
 
 - `check_and_patch.py` is copied to the workspace on every launch.
 - Patcher repository is pinned to a stable commit (`b9a01e8`) to prevent upstream changes from breaking the application.
@@ -407,7 +407,7 @@ This project is licensed under the **[GNU General Public License v3.0](https://w
 | `termux-shared/` | MIT / Apache 2.0 | See [`termux-shared/LICENSE.md`](termux-shared/LICENSE.md) |
 | Termux bootstrap packages | GPL v3.0 | From [termux/termux-packages](https://github.com/termux/termux-packages) |
 | Debian Bookworm rootfs (bundled asset) | Various (DFSG-compatible) | Standard Debian package licenses apply |
-| [open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher) | As-is (upstream) | Used as a runtime dependency, cloned on-demand |
+| [open-antigravity-patcher](https://gitlab.com/avencores/open-antigravity-patcher) | As-is (upstream) | Used as a runtime dependency, cloned on-demand |
 
 By using this application you accept the terms of all applicable licenses listed above.
 
@@ -433,7 +433,7 @@ By using this application you accept the terms of all applicable licenses listed
 | Компонент | Автор | Роль |
 |---|---|---|
 | [Termux App](https://github.com/termux/termux-app) | Команда Termux | Ядро терминального эмулятора, bootstrap-установщик, среда proot-distro |
-| [open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher) | AvenCores | Бинарный патчер для снятия региональной проверки AGY CLI |
+| [open-antigravity-patcher](https://gitlab.com/avencores/open-antigravity-patcher) | AvenCores | Бинарный патчер для снятия региональной проверки AGY CLI |
 | [Xray-core](https://github.com/XTLS/Xray-core) | XTLS Project | Прокси-ядро VLESS/XTLS Reality (загружается по требованию) |
 | Hysteria 2 | Hysteria Project | UDP-прокси (загружается по требованию) |
 
@@ -499,7 +499,7 @@ By using this application you accept the terms of all applicable licenses listed
 
 ### 5. 🛡️ Автоматический патч бинарника AGY (обход региональной блокировки)
 
-AGY CLI содержит региональные ограничения, блокирующие работу. Приложение интегрирует глубоко модифицированный воркфлоу **[open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher)** с фиксацией версий:
+AGY CLI содержит региональные ограничения, блокирующие работу. Приложение интегрирует глубоко модифицированный воркфлоу **[open-antigravity-patcher](https://gitlab.com/avencores/open-antigravity-patcher)** с фиксацией версий:
 
 - `check_and_patch.py` копируется в рабочее пространство при каждом запуске.
 - Репозиторий патчера жестко зафиксирован на стабильном коммите (`b9a01e8`), чтобы внешние изменения кода не нарушили работу приложения.
@@ -753,6 +753,6 @@ export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS="0"
 | `termux-shared/` | MIT / Apache 2.0 | Смотри [`termux-shared/LICENSE.md`](termux-shared/LICENSE.md) |
 | Bootstrap-пакеты Termux | GPL v3.0 | Из [termux/termux-packages](https://github.com/termux/termux-packages) |
 | Rootfs Debian Bookworm (встроенный актив) | Различные (DFSG-совместимые) | Применяются стандартные лицензии пакетов Debian |
-| [open-antigravity-patcher](https://github.com/AvenCores/open-antigravity-patcher) | As-is (upstream) | Используется как runtime-зависимость, клонируется по требованию |
+| [open-antigravity-patcher](https://gitlab.com/avencores/open-antigravity-patcher) | As-is (upstream) | Используется как runtime-зависимость, клонируется по требованию |
 
 Используя это приложение, вы принимаете условия всех применимых лицензий, перечисленных выше.
