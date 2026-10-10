@@ -56,17 +56,14 @@ This project stands on the shoulders of giants:
 
 Pre-compiled APK builds are published in the **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** tab.
 
-> Install the **universal** build unless you have a specific reason to use an architecture-specific one. It works on all devices.
+> **Target Architecture:** **ARM64 (`arm64-v8a`)**  
+> The app is built and hardware-optimized exclusively for 64-bit ARM (`aarch64`) devices, which covers virtually 100% of modern Android smartphones. The pre-cached Debian rootfs, Antigravity CLI binary, and binary byte-patches are compiled specifically for ARM64.
 
-### Available APK Variants
+### Available APK
 
-| Variant | File suffix | Target CPU | When to use |
+| Variant | File | Target CPU | Description |
 |---|---|---|---|
-| **Universal** ✅ | `_universal.apk` | All (arm64 + arm32 + x86 + x86_64) | **Recommended for all users** |
-| ARM64 | `_arm64-v8a.apk` | 64-bit ARM (most modern phones) | Smaller size, same performance |
-| ARMv7 | `_armeabi-v7a.apk` | 32-bit ARM (older phones, 2013–2017) | For old/budget devices only |
-| x86_64 | `_x86_64.apk` | 64-bit Intel/AMD (emulators, Chromebooks) | Android emulators, x86 tablets |
-| x86 | `_x86.apk` | 32-bit Intel (legacy emulators) | Very old emulators only |
+| **ARM64** ✅ | `agycli-arm64-v8a.apk` | 64-bit ARM (`arm64-v8a`) | **Recommended for all devices** (full offline bootstrap & CLI support) |
 
 ---
 
@@ -164,7 +161,7 @@ On every launch, the app verifies all required Debian packages (`python3`, `git`
 
 ## 🚀 Quick Start Guide
 
-### Step 1. **Download & Install:** Download the latest `agycli_universal.apk` from the **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** tab and install it. Android may ask you to allow installation from unknown sources — this is expected.
+### Step 1. **Download & Install:** Download the latest `agycli-arm64-v8a.apk` from the **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** tab and install it. Android may ask you to allow installation from unknown sources — this is expected.
 
 > ⚠️ **Important:** Do NOT install from Google Play. This is a standalone side-loaded app.
 
@@ -368,7 +365,7 @@ cd antigravity-cli-mobile
 
 export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS="0"
 ./gradlew assembleRelease
-# Output: app/build/outputs/apk/release/agycli_universal.apk
+# Output: app/build/outputs/apk/release/agycli-arm64-v8a.apk
 ```
 
 **Requirements:** Android SDK with NDK, JDK 11+, Gradle 7+
@@ -443,17 +440,14 @@ By using this application you accept the terms of all applicable licenses listed
 
 Готовые APK-файлы публикуются в разделе **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)**.
 
-> Устанавливай **universal** сборку, если нет конкретной причины выбирать другую. Работает на всех устройствах.
+> **Поддерживаемая архитектура:** **ARM64 (`arm64-v8a`)**  
+> Приложение собрано и аппаратно оптимизировано исключительно для 64-битных ARM (`aarch64`) устройств (практически 100% современных смартфонов). Встроенный офлайн-образ Debian Bookworm, бинарник Antigravity CLI и байт-патчи предкомпилированы под ARM64.
 
-### Варианты APK
+### Релизный APK
 
-| Вариант | Суффикс файла | Целевой CPU | Когда использовать |
+| Вариант | Файл | Целевой CPU | Описание |
 |---|---|---|---|
-| **Universal** ✅ | `_universal.apk` | Все (arm64 + arm32 + x86 + x86_64) | **Рекомендуется всем** |
-| ARM64 | `_arm64-v8a.apk` | 64-бит ARM (большинство современных телефонов) | Меньший размер, та же производительность |
-| ARMv7 | `_armeabi-v7a.apk` | 32-бит ARM (старые телефоны, 2013–2017) | Только для старых/бюджетных устройств |
-| x86_64 | `_x86_64.apk` | 64-бит Intel/AMD (эмуляторы, Chromebook) | Эмуляторы Android, x86-планшеты |
-| x86 | `_x86.apk` | 32-бит Intel (старые эмуляторы) | Только очень старые эмуляторы |
+| **ARM64** ✅ | `agycli-arm64-v8a.apk` | 64-бит ARM (`arm64-v8a`) | **Рекомендуется для всех устройств** (полная поддержка офлайн-бутстрапа и CLI) |
 
 ---
 
@@ -465,7 +459,7 @@ By using this application you accept the terms of all applicable licenses listed
 
 **Наше решение:**
 
-- Предскомпилированный rootfs **Debian Bookworm (ARM64)** (~42 МБ) **встроен прямо в APK**. *(Примечание: автономная распаковка оптимизирована для ARM64/aarch64 устройств. На других архитектурах, таких как x86_64 или armv7, базовый образ будет скачан из GitHub).*
+- Предскомпилированный rootfs **Debian Bookworm (ARM64)** (~42 МБ) **встроен прямо в APK**.
 - При первом запуске `TermuxInstaller.java` копирует образ в точный путь кэша, ожидаемый `proot-distro` (`/data/.../var/lib/proot-distro/dlcache/`).
 - `proot-distro install debian` обнаруживает файл и завершает установку **без единого сетевого запроса**.
 - **Время до работающего Debian shell: менее 30 секунд** благодаря кэшированию.
@@ -538,7 +532,7 @@ AGY CLI содержит региональные ограничения, бло
 
 ### Шаг 1 — Установить APK
 
-Скачай последний `agycli_universal.apk` из раздела **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** и установи. Android может попросить разрешить установку из неизвестных источников — это ожидаемо.
+Скачай последний `agycli-arm64-v8a.apk` из раздела **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** и установи. Android может попросить разрешить установку из неизвестных источников — это ожидаемо.
 
 > ⚠️ **Важно:** Не устанавливай из Google Play. Это отдельное приложение, устанавливаемое вручную.
 
@@ -733,7 +727,7 @@ cd antigravity-cli-mobile
 
 export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS="0"
 ./gradlew assembleRelease
-# Результат: app/build/outputs/apk/release/agycli_universal.apk
+# Результат: app/build/outputs/apk/release/agycli-arm64-v8a.apk
 ```
 
 **Требования:** Android SDK с NDK, JDK 11+, Gradle 7+
