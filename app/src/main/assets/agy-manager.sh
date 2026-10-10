@@ -1389,6 +1389,10 @@ if [ "$USE_PROXY" = "true" ] && { [ "$PROXY_TYPE" = "xray" ] || [ "$PROXY_TYPE" 
     export grpc_proxy="$HTTP_PROXY"
     export NO_PROXY="localhost,127.0.0.1"
     export no_proxy="$NO_PROXY"
+    for _i in $(seq 1 20); do
+        (exec 3<>/dev/tcp/127.0.0.1/${http_port}) 2>/dev/null && { exec 3>&-; break; }
+        sleep 0.1
+    done
 fi
 if [ "$USE_PROXY" = "true" ] && [ "$PROXY_TYPE" != "xray" ] && [ "$PROXY_TYPE" != "hysteria2" ]; then
     export HTTP_PROXY="${PROXY_TYPE}://${PROXY_ADDR}:${PROXY_PORT}"

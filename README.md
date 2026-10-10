@@ -31,6 +31,14 @@
 
 It is built on a deep fork of the open-source **[Termux](https://github.com/termux/termux-app)** terminal emulator, with a significant layer of custom engineering on top: an embedded Debian Bookworm Linux container, a smart Bash orchestration system, an on-demand proxy engine loader, automatic region-bypass patching, and hardware-compatibility fixes — all woven together into a single APK that just works.
 
+### 🌟 What's New in v2.0.0
+
+- **📂 Full Filesystem Mount:** Access all internal storage folders (`/phone` and `/sdcard` bound to `/storage/emulated/0`) directly from the Debian environment.
+- **⚙️ In-App Overlay TUI:** Launch the environment manager instantly via the `⚙️` mobile toolbar button without interrupting running sessions.
+- **🛡️ Dedicated Patcher Menu:** MultiGate V1.3.8 support (X64, ARM64, ARM64_W2, ARM64_W4) with a toggleable Update Lock to control background self-updates.
+- **⚡ Bulletproof Initial Setup:** Resolved permission race conditions (`Unable to install bootstrap`) and streamlined pre-cached container initialization.
+- **🌐 Upgraded Proxy Subsystem:** Native Hysteria 2 support with Salamander obfuscation alongside Xray Reality, startup socket synchronization, and full environment variable propagation (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `GRPC_PROXY`).
+
 ### 🔗 Credits & Open-Source Attribution
 
 This project stands on the shoulders of giants:
@@ -411,6 +419,14 @@ By using this application you accept the terms of all applicable licenses listed
 **antigravity-cli-mobile** — это самодостаточное Android-приложение-терминал для развёртывания, настройки и запуска **Antigravity CLI** на мобильных устройствах. С автоматической установкой и без ручной настройки.
 
 Построено на базе глубокого форка **[Termux](https://github.com/termux/termux-app)** с обширным слоем собственной инженерии: встроенный контейнер Debian Bookworm, умная система Bash-скриптов, загрузчик прокси-ядер по требованию, автоматическое снятие региональной блокировки и исправления совместимости — всё в одном APK.
+
+### 🌟 Что нового в версии 2.0.0
+
+- **📂 Монтирование полной файловой системы:** Прямой доступ ко всей памяти устройства (`/phone` и `/sdcard` привязаны к `/storage/emulated/0`) прямо из контейнера.
+- **⚙️ Меню настроек поверх терминала (Overlay TUI):** Вызов меню менеджера в один клик по кнопке `⚙️` на панели быстрых клавиш без прерывания активной сессии.
+- **🛡️ Полноценное меню патчера:** Интеграция MultiGate V1.3.8 (X64, ARM64, ARM64_W2, ARM64_W4) и переключатель Update Lock для защиты от нежелательного фонового автообновления.
+- **⚡ Улучшенная первоначальная установка:** Устранена ошибка конкурентной распаковки бутстрапа (`Unable to install bootstrap`), обеспечен быстрый старт из встроенного кэша.
+- **🌐 Улучшенный встроенный прокси:** Поддержка Hysteria 2 (Salamander) наряду с Xray Reality, устранение сетевых гонок на старте через проверку порта и полный экспорт переменных окружения (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `GRPC_PROXY`).
 
 ### 🔗 Благодарности и атрибуция
 
