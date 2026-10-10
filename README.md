@@ -12,8 +12,19 @@
   <a href="https://github.com/Milordick/antigravity-cli-mobile/releases"><img src="https://img.shields.io/github/v/release/Milordick/antigravity-cli-mobile?color=6e40c9&logo=github&style=for-the-badge&label=Latest+Release" alt="GitHub release"/></a>
   <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge" alt="License"/></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Android%207.0%2B-brightgreen.svg?style=for-the-badge" alt="Platform"/></a>
-  <a href="#"><img src="https://img.shields.io/badge/Architecture-ARM64%20%7C%20ARMv7%20%7C%20x86%20%7C%20x86__64-orange.svg?style=for-the-badge" alt="Architectures"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/Architecture-ARM64%20(arm64--v8a)-orange.svg?style=for-the-badge" alt="Architecture"/></a>
   <a href="https://pay.cloudtips.ru/p/0ef570e5"><img src="https://img.shields.io/badge/Support-Donate-ff5f5f.svg?style=for-the-badge&logo=heart" alt="Donate"/></a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/screen_session.png" width="31%" alt="Antigravity CLI Session"/>
+  <img src="docs/screenshots/screen_overlay.png" width="31%" alt="Settings Overlay"/>
+  <img src="docs/screenshots/screen_menu.png" width="31%" alt="Main Menu"/>
+</p>
+
+<p align="center">
+  <sub><b>1.</b> Active CLI Session &nbsp;&bull;&nbsp; <b>2.</b> In-App Settings Overlay &nbsp;&bull;&nbsp; <b>3.</b> Main Menu TUI</sub><br/>
+  <sub><b>1.</b> Сессия Antigravity CLI &nbsp;&bull;&nbsp; <b>2.</b> Меню настроек поверх сессии &nbsp;&bull;&nbsp; <b>3.</b> Главное меню TUI</sub>
 </p>
 
 ---
