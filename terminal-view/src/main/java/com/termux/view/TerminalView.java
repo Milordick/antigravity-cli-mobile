@@ -142,8 +142,10 @@ public final class TerminalView extends View {
             @Override
             public boolean onUp(MotionEvent event) {
                 mScrollRemainder = 0.0f;
-                if (mClient != null && !scrolledWithFinger && !isSelectingText() && mClient.onUrlTap(event)) return true;
-                if (mEmulator != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !scrolledWithFinger) {
+                boolean wasScrolled = scrolledWithFinger;
+                scrolledWithFinger = false;
+                if (mClient != null && !wasScrolled && !isSelectingText() && mClient.onUrlTap(event)) return true;
+                if (mEmulator != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !wasScrolled) {
                     // Quick event processing when mouse tracking is active - do not wait for check of double tapping
                     // for zooming.
                     sendMouseEventCode(event, TerminalEmulator.MOUSE_LEFT_BUTTON, true);
@@ -154,7 +156,6 @@ public final class TerminalView extends View {
                     }
                     return true;
                 }
-                scrolledWithFinger = false;
                 return false;
             }
 

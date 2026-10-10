@@ -185,26 +185,21 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     public boolean onUrlTap(MotionEvent e) {
         TerminalEmulator term = mActivity.getCurrentSession().getEmulator();
         if (term == null) return false;
-        // Do not swallow taps while the app under the cursor consumes mouse events itself
-        if (term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) return false;
-
         try {
             int[] columnAndRow = mActivity.getTerminalView().getColumnAndRow(e, true);
             int column = columnAndRow[0];
             int externalRow = columnAndRow[1];
-            // getWordAtLocation expects an internal buffer row; guard against out-of-range taps
+            // getWordAtLocation expects an external row clamped to [-activeTranscriptRows, screenRows-1]
             if (externalRow < -term.getScreen().getActiveTranscriptRows() || externalRow >= term.mRows)
                 return false;
-            int internalRow = term.getScreen().externalToInternalRow(externalRow);
 
-            String wordAtTap = term.getScreen().getWordAtLocation(column, internalRow);
-            if (wordAtTap == null || wordAtTap.trim().length() == 0) return false;
-
-            LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(wordAtTap);
+            String wordAtTap = term.getScreen().getWordAtLocation(column, externalRow);
             String foundUrl = null;
-
-            if (!urlSet.isEmpty()) {
-                foundUrl = (String) urlSet.iterator().next();
+            if (wordAtTap != null && wordAtTap.trim().length() > 0) {
+                LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(wordAtTap);
+                if (!urlSet.isEmpty()) {
+                    foundUrl = (String) urlSet.iterator().next();
+                }
             }
 
             // Giga-link fallback: CLI frameworks often hard-wrap URLs with borders/padding.
@@ -258,7 +253,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                         part = words[0]; // take the first word
                     } else if (first == last && part.contains(" ")) {
                         // Tapped on a single line with spaces, just use wordAtTap
-                        part = wordAtTap;
+                        part = (wordAtTap != null) ? wordAtTap : "";
                     }
                     gigaUrl.append(part);
                 }
@@ -272,14 +267,19 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     }
                 }
             }
-
             if (foundUrl != null) {
+                while (foundUrl.length() > 0 && (foundUrl.endsWith(".") || foundUrl.endsWith(",") || (foundUrl.endsWith(")") && !foundUrl.contains("(")))) {
+                    foundUrl = foundUrl.substring(0, foundUrl.length() - 1);
+                }
                 final String url = foundUrl;
                 new AlertDialog.Builder(mActivity)
-                    .setTitle("Open Link?")
+                    .setTitle(R.string.title_open_link)
                     .setMessage(url)
-                    .setPositiveButton("Open", (dialog, which) -> ShareUtils.openUrl(mActivity, url))
-                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton(R.string.action_open_link, (dialog, which) -> ShareUtils.openUrl(mActivity, url))
+                    .setNeutralButton(R.string.action_copy_link, (dialog, which) -> {
+                        ShareUtils.copyTextToClipboard(mActivity, url, mActivity.getString(R.string.msg_link_copied_to_clipboard));
+                    })
+                    .setNegativeButton(R.string.action_close_link, null)
                     .show();
                 return true;
             }

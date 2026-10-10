@@ -64,6 +64,11 @@
     <string name="title_select_url_dialog">Click URL to copy or long press to open</string>
     <string name="title_select_url_none_found">No URL found in the terminal.</string>
     <string name="msg_select_url_copied_to_clipboard">URL copied to clipboard</string>
+    <string name="title_open_link">Open Link?</string>
+    <string name="action_open_link">Open</string>
+    <string name="action_copy_link">Copy</string>
+    <string name="action_close_link">Cancel</string>
+    <string name="msg_link_copied_to_clipboard">Link copied to clipboard</string>
 
     <string name="action_share_transcript">Share transcript</string>
     <string name="title_share_transcript">Terminal transcript</string>
