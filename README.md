@@ -162,8 +162,6 @@ On every launch, the app verifies all required Debian packages (`python3`, `git`
 
 ### Step 1. **Download & Install:** Download the latest `agycli-arm64-v8a.apk` from the **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** tab and install it. Android may ask you to allow installation from unknown sources — this is expected.
 
-> ⚠️ **Important:** Do NOT install from Google Play. This is a standalone side-loaded app.
-
 ---
 
 ### Step 2 — First Launch (Fully Automatic)
@@ -527,8 +525,6 @@ AGY CLI содержит региональные ограничения, бло
 ### Шаг 1 — Установить APK
 
 Скачай последний `agycli-arm64-v8a.apk` из раздела **[Releases](https://github.com/Milordick/antigravity-cli-mobile/releases)** и установи. Android может попросить разрешить установку из неизвестных источников — это ожидаемо.
-
-> ⚠️ **Важно:** Не устанавливай из Google Play. Это отдельное приложение, устанавливаемое вручную.
 
 ---
 
